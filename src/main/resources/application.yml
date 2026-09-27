@@ -5,6 +5,20 @@ spring:
   application:
     name: oauth
 
+management:
+  server:
+    port: ${OAUTH_INTERNAL_METRICS_PORT:9464}
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+
 springdoc:
   swagger-ui:
     path: /swagger-ui.html

@@ -16,5 +16,5 @@ USER spring:spring
 WORKDIR /app
 COPY --from=build --chown=spring:spring /workspace/target/oauth-*.jar app.jar
 
-EXPOSE 3001
+EXPOSE 3001 9464
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]
