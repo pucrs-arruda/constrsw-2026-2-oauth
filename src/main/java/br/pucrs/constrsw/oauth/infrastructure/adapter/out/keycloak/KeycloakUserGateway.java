@@ -95,8 +95,11 @@ public class KeycloakUserGateway implements UserGateway {
             ub.queryParam("enabled", enabled);
         }
 
-        ResponseEntity<List> response = call(ub.build(true).toUriString(), HttpMethod.GET,
-                new HttpEntity<>(headers(bearer, null)), List.class);
+        // Object.class (nao List.class): em erro (401/403/...) o Keycloak devolve um
+        // objeto JSON, nao um array - forcar List.class quebraria a deserializacao
+        // antes mesmo de chegar ao translateError, virando 500 em vez do codigo certo.
+        ResponseEntity<Object> response = call(ub.build(true).toUriString(), HttpMethod.GET,
+                new HttpEntity<>(headers(bearer, null)), Object.class);
 
         HttpStatusCode status = response.getStatusCode();
         if (status.is2xxSuccessful()) {
