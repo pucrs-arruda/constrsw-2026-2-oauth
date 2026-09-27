@@ -1,0 +1,24 @@
+services:
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+    volumes:
+      - ./backend/oauth/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./backend/oauth/prometheus/recording-rules.yml:/etc/prometheus/recording-rules.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "${PROMETHEUS_EXTERNAL_PORT:-9090}:9090"
+    networks:
+      - constrsw
+    depends_on:
+      oauth:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  prometheus-data:

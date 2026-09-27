@@ -51,6 +51,7 @@ Docker Compose reads the service configuration from the root `.env` file.
 | `KEYCLOAK_REALM` | Keycloak realm | `constrsw` |
 | `KEYCLOAK_CLIENT_ID` | Keycloak client | `oauth` |
 | `KEYCLOAK_CLIENT_SECRET` | Confidential client secret | Required |
+| `OAUTH_INTERNAL_METRICS_PORT` | HTTP port used by Actuator metrics | `9464` |
 
 Inside Docker Compose, `KEYCLOAK_SERVER_URL` points to the `keycloak` service. Keep the client secret outside source control and do not send it from API clients.
 
@@ -61,6 +62,23 @@ When the API is running through Docker Compose:
 - Swagger UI: <http://localhost:8181/swagger-ui.html>
 - OpenAPI document: <http://localhost:8181/v3/api-docs>
 - Health check: <http://localhost:8181/health>
+
+## Prometheus telemetry
+
+From the `base` repository root, start the stack with the Prometheus Compose overlay:
+
+```bash
+docker compose -f docker-compose.yml -f backend/oauth/docker-compose.prometheus.yml up --build -d
+```
+
+Prometheus is available at <http://localhost:9090>. Its targets page should show
+the `oauth` and `keycloak` jobs as `UP`. The OAuth metrics endpoint is available
+at <http://localhost:8381/actuator/prometheus> with the default `.env` ports.
+The OAuth Actuator runs on a separate internal port (`9464` by default), while
+the application API remains on port `3001` inside Docker. If the internal
+metrics ports are changed, update `prometheus/prometheus.yml` accordingly.
+For ready-to-use HTTP, latency, JVM, availability, and Prometheus health
+graphs, see [Prometheus graphs](prometheus/GRAPHS.md).
 
 ## Endpoints
 
