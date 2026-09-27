@@ -27,6 +27,25 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 class AuthControllerIntegrationTest {
 
+    @Test
+    void swaggerDocumentsLoginFormAndCreatedResponse() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.paths['/login'].post.requestBody.content['multipart/form-data']").exists())
+                .andExpect(jsonPath("$.paths['/login'].post.responses['201']").exists())
+                .andExpect(jsonPath("$.paths['/login'].post.security").isEmpty());
+    }
+
+    @Test
+    void swaggerShowsReadableCreateUserExamples() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.components.schemas.CreateUserRequest.properties.username.example")
+                        .value("teste.swagger@pucrs.br"))
+                .andExpect(jsonPath("$.components.schemas.CreateUserRequest.properties.email.example")
+                        .value("teste.swagger@pucrs.br"));
+    }
+
     @Autowired
     private MockMvc mockMvc;
 

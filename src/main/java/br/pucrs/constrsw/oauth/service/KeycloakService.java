@@ -28,6 +28,9 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.net.URI;
 import java.util.*;
@@ -48,12 +51,6 @@ public class KeycloakService {
 
     @Value("${keycloak.client-secret}")
     private String clientSecret;
-
-    @Value("${keycloak.admin-username:admin}")
-    private String adminUsername;
-
-    @Value("${keycloak.admin-password:a12345678}")
-    private String adminPassword;
 
     private final RestTemplate restTemplate;
 
@@ -111,31 +108,36 @@ public class KeycloakService {
     }
 
     /**
-     * Obtém um token de administração do Keycloak no realm 'master' usando as credenciais admin.
+     * Usa o Bearer da chamada, após confirmar que o Keycloak aceita o token.
+     * As permissões são decididas pela API administrativa do próprio Keycloak.
      */
-    public String getAdminToken() {
-        String tokenUrl = String.format("%s/realms/master/protocol/openid-connect/token", keycloakUrl);
-
+    public String getCallerToken() {
+        if (!(RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attributes)) {
+            throw new KeycloakException("401", "Access token ausente", HttpStatus.UNAUTHORIZED);
+        }
+        String authorization = attributes.getRequest().getHeader(HttpHeaders.AUTHORIZATION);
+        if (authorization == null || !authorization.startsWith("Bearer ") || authorization.substring(7).isBlank()) {
+            throw new KeycloakException("401", "Access token ausente ou inválido", HttpStatus.UNAUTHORIZED);
+        }
+        String token = authorization.substring(7).trim();
+        String introspectionUrl = String.format("%s/realms/%s/protocol/openid-connect/token/introspect", keycloakUrl, realm);
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-
         MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
-        body.add("grant_type", "password");
-        body.add("client_id", "admin-cli");
-        body.add("username", adminUsername);
-        body.add("password", adminPassword);
-
-        HttpEntity<MultiValueMap<String, String>> entity = new HttpEntity<>(body, headers);
-
+        body.add("token", token);
+        body.add("client_id", clientId);
+        body.add("client_secret", clientSecret);
         try {
-            ResponseEntity<Map> response = restTemplate.postForEntity(tokenUrl, entity, Map.class);
-            if (response.getBody() != null && response.getBody().containsKey("access_token")) {
-                return (String) response.getBody().get("access_token");
+            ResponseEntity<Map> response = restTemplate.postForEntity(
+                    introspectionUrl, new HttpEntity<>(body, headers), Map.class);
+            if (response.getBody() == null || !Boolean.TRUE.equals(response.getBody().get("active"))) {
+                throw new KeycloakException("401", "Access token inválido", HttpStatus.UNAUTHORIZED);
             }
-            throw new KeycloakException("ADMIN_AUTH_FAILED", "Token de administração não retornado pelo Keycloak", HttpStatus.INTERNAL_SERVER_ERROR);
-        } catch (HttpClientErrorException | HttpServerErrorException e) {
-            log.error("Erro ao obter admin token do Keycloak: {}", e.getResponseBodyAsString());
-            throw new KeycloakException("ADMIN_AUTH_ERROR", "Falha na autenticação administrativa com Keycloak", (HttpStatus) e.getStatusCode(), e);
+            return token;
+        } catch (HttpClientErrorException e) {
+            throw new KeycloakException("503", "Falha ao validar token no Keycloak", HttpStatus.SERVICE_UNAVAILABLE, e);
+        } catch (HttpServerErrorException | ResourceAccessException e) {
+            throw new KeycloakException("503", "Falha ao validar token no Keycloak", HttpStatus.SERVICE_UNAVAILABLE, e);
         }
     }
 
@@ -143,12 +145,12 @@ public class KeycloakService {
      * POST /users: Rota complexa de criação de usuário (pegar ID no header Location, tratar erro 409).
      */
     public UserResponse createUser(CreateUserRequest request) {
-        String adminToken = getAdminToken();
+        String callerToken = getCallerToken();
         String usersUrl = String.format("%s/admin/realms/%s/users", keycloakUrl, realm);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setBearerAuth(adminToken);
+        headers.setBearerAuth(callerToken);
 
         Map<String, Object> userPayload = new HashMap<>();
         userPayload.put("username", request.username());
@@ -172,11 +174,11 @@ public class KeycloakService {
 
             // Extrai o ID do usuário do header Location retornado pelo Keycloak
             URI location = response.getHeaders().getLocation();
-            String userId = null;
-            if (location != null) {
-                String path = location.getPath();
-                userId = path.substring(path.lastIndexOf('/') + 1);
+            String path = location == null ? null : location.getPath();
+            if (path == null || path.isBlank() || path.endsWith("/")) {
+                throw new KeycloakException("502", "Keycloak não retornou o id do usuário em Location", HttpStatus.BAD_GATEWAY);
             }
+            String userId = path.substring(path.lastIndexOf('/') + 1);
 
             log.info("Usuário criado com sucesso no Keycloak: username='{}', id='{}'", request.username(), userId);
             return new UserResponse(
@@ -196,6 +198,8 @@ public class KeycloakService {
                 throw new KeycloakException("USER_ALREADY_EXISTS", "Usuário ou e-mail já cadastrado no Keycloak", HttpStatus.CONFLICT, e);
             }
             throw new KeycloakException("KEYCLOAK_CREATE_USER_ERROR", "Erro ao criar usuário no Keycloak: " + e.getMessage(), (HttpStatus) e.getStatusCode(), e);
+        } catch (KeycloakException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Erro inesperado ao criar usuário no Keycloak: {}", e.getMessage(), e);
             throw new KeycloakException("KEYCLOAK_USER_CREATION_FAILED", "Falha na criação de usuário: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR, e);
@@ -206,12 +210,12 @@ public class KeycloakService {
      * PATCH /users/{id}: Atualizar senha do usuário (estrutura CredentialRepresentation).
      */
     public void updatePassword(String userId, UpdatePasswordRequest request) {
-        String adminToken = getAdminToken();
+        String callerToken = getCallerToken();
         String resetPasswordUrl = String.format("%s/admin/realms/%s/users/%s/reset-password", keycloakUrl, realm, userId);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setBearerAuth(adminToken);
+        headers.setBearerAuth(callerToken);
 
         // Monta a estrutura específica CredentialRepresentation do Keycloak
         Map<String, Object> credentialRepresentation = new HashMap<>();
@@ -243,32 +247,35 @@ public class KeycloakService {
      * GET /users (filtro ?enabled=): Consumir API do Keycloak passando parâmetros de busca.
      */
     public List<UserResponse> getUsers(Boolean enabled) {
-        String adminToken = getAdminToken();
+        String callerToken = getCallerToken();
         String usersUrl = String.format("%s/admin/realms/%s/users", keycloakUrl, realm);
         if (enabled != null) {
             usersUrl += "?enabled=" + enabled;
         }
 
         HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth(adminToken);
+        headers.setBearerAuth(callerToken);
         HttpEntity<Void> entity = new HttpEntity<>(headers);
 
         try {
-            ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
-                    usersUrl,
-                    HttpMethod.GET,
-                    entity,
-                    new ParameterizedTypeReference<List<Map<String, Object>>>() {}
-            );
-
-            List<Map<String, Object>> body = response.getBody();
-            if (body == null) {
-                return Collections.emptyList();
+            final int pageSize = 100;
+            List<Map<String, Object>> users = new ArrayList<>();
+            for (int offset = 0; ; offset += pageSize) {
+                String pageUrl = usersUrl + (enabled == null ? "?" : "&")
+                        + "first=" + offset + "&max=" + pageSize;
+                ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
+                        pageUrl, HttpMethod.GET, entity,
+                        new ParameterizedTypeReference<List<Map<String, Object>>>() {}
+                );
+                List<Map<String, Object>> page = response.getBody();
+                if (page == null || page.isEmpty()) break;
+                users.addAll(page);
+                if (page.size() < pageSize) break;
             }
 
-            return body.stream().map(u -> {
+            return users.stream().map(u -> {
                 String userId = (String) u.get("id");
-                List<String> roles = getUserRealmRoles(adminToken, userId);
+                List<String> roles = getUserRealmRoles(callerToken, userId);
                 String primaryRole = extractPrimaryRole(roles);
                 String username = (String) u.get("username");
                 if (username == null) {
@@ -297,11 +304,11 @@ public class KeycloakService {
      * GET /users/{id}: Busca simples de usuário por ID.
      */
     public UserResponse getUserById(String userId) {
-        String adminToken = getAdminToken();
+        String callerToken = getCallerToken();
         String userUrl = String.format("%s/admin/realms/%s/users/%s", keycloakUrl, realm, userId);
 
         HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth(adminToken);
+        headers.setBearerAuth(callerToken);
         HttpEntity<Void> entity = new HttpEntity<>(headers);
 
         try {
@@ -317,7 +324,7 @@ public class KeycloakService {
                 throw new KeycloakException("USER_NOT_FOUND", "Usuário com id '" + userId + "' não foi encontrado", HttpStatus.NOT_FOUND);
             }
 
-            List<String> roles = getUserRealmRoles(adminToken, userId);
+            List<String> roles = getUserRealmRoles(callerToken, userId);
             String primaryRole = extractPrimaryRole(roles);
             String username = (String) u.get("username");
             if (username == null) {
@@ -354,17 +361,18 @@ public class KeycloakService {
      * PUT /users/{id}: Atualizar dados de cadastro de um usuário.
      */
     public UserResponse updateUser(String userId, UpdateUserRequest request) {
-        String adminToken = getAdminToken();
-        Map<String, Object> existingUser = getUserMapById(adminToken, userId);
+        String callerToken = getCallerToken();
+        Map<String, Object> existingUser = getUserMapById(callerToken, userId);
 
         String userUrl = String.format("%s/admin/realms/%s/users/%s", keycloakUrl, realm, userId);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setBearerAuth(adminToken);
+        headers.setBearerAuth(callerToken);
 
         if (request.email() != null && !request.email().isBlank()) {
             existingUser.put("email", request.email());
+            existingUser.put("username", request.email());
         }
         if (request.firstName() != null) {
             existingUser.put("firstName", request.firstName());
@@ -407,14 +415,14 @@ public class KeycloakService {
      * DELETE /users/{id}: Deleção lógica de usuário (Fazer GET, mudar enabled para false e devolver com PUT).
      */
     public void logicalDeleteUser(String userId) {
-        String adminToken = getAdminToken();
-        Map<String, Object> existingUser = getUserMapById(adminToken, userId);
+        String callerToken = getCallerToken();
+        Map<String, Object> existingUser = getUserMapById(callerToken, userId);
 
         String userUrl = String.format("%s/admin/realms/%s/users/%s", keycloakUrl, realm, userId);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setBearerAuth(adminToken);
+        headers.setBearerAuth(callerToken);
 
         // Mudar enabled para false
         existingUser.put("enabled", false);
@@ -443,11 +451,11 @@ public class KeycloakService {
     /**
      * Busca representação bruta em Map do usuário no Keycloak.
      */
-    private Map<String, Object> getUserMapById(String adminToken, String userId) {
+    private Map<String, Object> getUserMapById(String callerToken, String userId) {
         String userUrl = String.format("%s/admin/realms/%s/users/%s", keycloakUrl, realm, userId);
 
         HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth(adminToken);
+        headers.setBearerAuth(callerToken);
         HttpEntity<Void> entity = new HttpEntity<>(headers);
 
         try {
@@ -478,17 +486,17 @@ public class KeycloakService {
      * POST /users/{id}/roles/{roleId}: Atribuir uma Role a um usuário (usa a API de role-mapping do Keycloak).
      */
     public void assignRoleToUser(String userId, String roleId) {
-        String adminToken = getAdminToken();
+        String callerToken = getCallerToken();
 
         // 1. Obter a Role Representation por roleId
-        Map<String, Object> roleRepresentation = getRoleById(adminToken, roleId);
+        Map<String, Object> roleRepresentation = getRoleById(callerToken, roleId);
 
         // 2. POST /admin/realms/{realm}/users/{id}/role-mappings/realm
         String mappingUrl = String.format("%s/admin/realms/%s/users/%s/role-mappings/realm", keycloakUrl, realm, userId);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setBearerAuth(adminToken);
+        headers.setBearerAuth(callerToken);
 
         HttpEntity<List<Map<String, Object>>> entity = new HttpEntity<>(List.of(roleRepresentation), headers);
 
@@ -516,17 +524,17 @@ public class KeycloakService {
      * DELETE /users/{id}/roles/{roleId}: Remover uma Role de um usuário.
      */
     public void removeRoleFromUser(String userId, String roleId) {
-        String adminToken = getAdminToken();
+        String callerToken = getCallerToken();
 
         // 1. Obter a Role Representation por roleId
-        Map<String, Object> roleRepresentation = getRoleById(adminToken, roleId);
+        Map<String, Object> roleRepresentation = getRoleById(callerToken, roleId);
 
         // 2. DELETE /admin/realms/{realm}/users/{id}/role-mappings/realm
         String mappingUrl = String.format("%s/admin/realms/%s/users/%s/role-mappings/realm", keycloakUrl, realm, userId);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setBearerAuth(adminToken);
+        headers.setBearerAuth(callerToken);
 
         HttpEntity<List<Map<String, Object>>> entity = new HttpEntity<>(List.of(roleRepresentation), headers);
 
@@ -554,14 +562,14 @@ public class KeycloakService {
      * Consulta as roles do realm atribuídas ao usuário no Keycloak.
      * GET /admin/realms/{realm}/users/{id}/role-mappings/realm
      */
-    public List<String> getUserRealmRoles(String adminToken, String userId) {
+    public List<String> getUserRealmRoles(String callerToken, String userId) {
         if (userId == null || userId.isBlank()) {
             return Collections.emptyList();
         }
         String mappingUrl = String.format("%s/admin/realms/%s/users/%s/role-mappings/realm", keycloakUrl, realm, userId);
 
         HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth(adminToken);
+        headers.setBearerAuth(callerToken);
         HttpEntity<Void> entity = new HttpEntity<>(headers);
 
         try {
@@ -611,11 +619,11 @@ public class KeycloakService {
     /**
      * Busca os metadados de uma role no Keycloak por seu roleId (/roles-by-id/{roleId}).
      */
-    private Map<String, Object> getRoleById(String adminToken, String roleId) {
+    private Map<String, Object> getRoleById(String callerToken, String roleId) {
         String roleUrl = String.format("%s/admin/realms/%s/roles-by-id/%s", keycloakUrl, realm, roleId);
 
         HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth(adminToken);
+        headers.setBearerAuth(callerToken);
         HttpEntity<Void> entity = new HttpEntity<>(headers);
 
         try {
@@ -646,12 +654,12 @@ public class KeycloakService {
      * POST /roles: Criar cargo no Keycloak.
      */
     public RoleResponse createRole(CreateRoleRequest request) {
-        String adminToken = getAdminToken();
+        String callerToken = getCallerToken();
         String rolesUrl = String.format("%s/admin/realms/%s/roles", keycloakUrl, realm);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setBearerAuth(adminToken);
+        headers.setBearerAuth(callerToken);
 
         Map<String, Object> payload = new HashMap<>();
         payload.put("name", request.name());
@@ -691,11 +699,11 @@ public class KeycloakService {
      * GET /roles: Listar cargos do realm.
      */
     public List<RoleResponse> getRoles() {
-        String adminToken = getAdminToken();
+        String callerToken = getCallerToken();
         String rolesUrl = String.format("%s/admin/realms/%s/roles", keycloakUrl, realm);
 
         HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth(adminToken);
+        headers.setBearerAuth(callerToken);
         HttpEntity<Void> entity = new HttpEntity<>(headers);
 
         try {
@@ -725,8 +733,8 @@ public class KeycloakService {
      * GET /roles/{id}: Buscar cargo específico por ID.
      */
     public RoleResponse getRole(String roleId) {
-        String adminToken = getAdminToken();
-        Map<String, Object> roleMap = getRoleById(adminToken, roleId);
+        String callerToken = getCallerToken();
+        Map<String, Object> roleMap = getRoleById(callerToken, roleId);
         return mapToRoleResponse(roleMap);
     }
 
@@ -734,14 +742,14 @@ public class KeycloakService {
      * PUT /roles/{id}: Atualizar cargo completo.
      */
     public RoleResponse updateRole(String roleId, UpdateRoleRequest request) {
-        String adminToken = getAdminToken();
-        Map<String, Object> existing = getRoleById(adminToken, roleId);
+        String callerToken = getCallerToken();
+        Map<String, Object> existing = getRoleById(callerToken, roleId);
 
         String roleUrl = String.format("%s/admin/realms/%s/roles-by-id/%s", keycloakUrl, realm, roleId);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setBearerAuth(adminToken);
+        headers.setBearerAuth(callerToken);
 
         existing.put("name", request.name());
         existing.put("description", request.description());
@@ -757,7 +765,7 @@ public class KeycloakService {
         try {
             restTemplate.put(roleUrl, entity);
             log.info("Cargo id='{}' atualizado com sucesso", roleId);
-            return mapToRoleResponse(getRoleById(adminToken, roleId));
+            return mapToRoleResponse(getRoleById(callerToken, roleId));
         } catch (HttpClientErrorException.NotFound e) {
             throw new KeycloakException("ROLE_NOT_FOUND", "Cargo com id '" + roleId + "' não foi encontrado", HttpStatus.NOT_FOUND, e);
         } catch (HttpClientErrorException e) {
@@ -778,14 +786,14 @@ public class KeycloakService {
      * PATCH /roles/{id}: Atualizar cargo parcial.
      */
     public RoleResponse patchRole(String roleId, PatchRoleRequest request) {
-        String adminToken = getAdminToken();
-        Map<String, Object> existing = getRoleById(adminToken, roleId);
+        String callerToken = getCallerToken();
+        Map<String, Object> existing = getRoleById(callerToken, roleId);
 
         String roleUrl = String.format("%s/admin/realms/%s/roles-by-id/%s", keycloakUrl, realm, roleId);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setBearerAuth(adminToken);
+        headers.setBearerAuth(callerToken);
 
         if (request.name() != null && !request.name().isBlank()) {
             existing.put("name", request.name());
@@ -804,7 +812,7 @@ public class KeycloakService {
         try {
             restTemplate.put(roleUrl, entity);
             log.info("Cargo id='{}' atualizado parcialmente com sucesso", roleId);
-            return mapToRoleResponse(getRoleById(adminToken, roleId));
+            return mapToRoleResponse(getRoleById(callerToken, roleId));
         } catch (HttpClientErrorException.NotFound e) {
             throw new KeycloakException("ROLE_NOT_FOUND", "Cargo com id '" + roleId + "' não foi encontrado", HttpStatus.NOT_FOUND, e);
         } catch (HttpClientErrorException e) {
@@ -825,14 +833,14 @@ public class KeycloakService {
      * DELETE /roles/{id}: Deleção lógica de role (simula desativação com atributo customizado enabled=false).
      */
     public void logicalDeleteRole(String roleId) {
-        String adminToken = getAdminToken();
-        Map<String, Object> existing = getRoleById(adminToken, roleId);
+        String callerToken = getCallerToken();
+        Map<String, Object> existing = getRoleById(callerToken, roleId);
 
         String roleUrl = String.format("%s/admin/realms/%s/roles-by-id/%s", keycloakUrl, realm, roleId);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setBearerAuth(adminToken);
+        headers.setBearerAuth(callerToken);
 
         Map<String, Object> attributes = (Map<String, Object>) existing.getOrDefault("attributes", new HashMap<>());
         attributes.put("enabled", List.of("false"));
@@ -863,11 +871,11 @@ public class KeycloakService {
      * Busca uma role pelo seu nome (/roles/{roleName}).
      */
     private RoleResponse getRoleByName(String roleName) {
-        String adminToken = getAdminToken();
+        String callerToken = getCallerToken();
         String roleUrl = String.format("%s/admin/realms/%s/roles/%s", keycloakUrl, realm, roleName);
 
         HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth(adminToken);
+        headers.setBearerAuth(callerToken);
         HttpEntity<Void> entity = new HttpEntity<>(headers);
 
         try {

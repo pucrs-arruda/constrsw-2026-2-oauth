@@ -45,6 +45,7 @@ A documentação interativa gerada pela biblioteca **Springdoc OpenAPI 3** está
 - `POST /users`: Cria usuário no Keycloak com validação de regex de email. Retorna `201 Created` e cabeçalho `Location: /users/{id}`.
 - `GET /users`: Lista usuários do Realm, com suporte ao filtro `?enabled=true|false`.
 - `GET /users/{id}`: Busca dados detalhados do usuário por ID único.
+- As rotas de usuários e papéis recebem `Authorization: Bearer {access_token}`; a API valida o token e encaminha esse mesmo token à API administrativa do Keycloak, que decide as permissões.
 - `PUT /users/{id}`: Atualiza cadastro do usuário (`firstName`, `lastName`, `email`, `enabled`).
 - `PATCH /users/{id}`: Redefine/atualiza senha do usuário (estrutura `CredentialRepresentation`).
 - `DELETE /users/{id}`: **Deleção lógica** do usuário (obtém dados do usuário, altera `enabled: false` e atualiza no Keycloak).
@@ -67,11 +68,16 @@ Todas as respostas de exceção da API seguem uma estrutura JSON uniforme interc
 
 ```json
 {
-  "error_code": "USER_NOT_FOUND",
-  "message": "Usuário com id '123' não foi encontrado",
-  "error_stack": "br.pucrs.constrsw.oauth.exception.KeycloakException...",
-  "status": 404,
-  "timestamp": "2026-09-16T22:00:00.000Z"
+  "error_code": "404",
+  "error_description": "Objeto não localizado",
+  "error_source": "OAuthAPI",
+  "error_stack": [
+    {
+      "error_code": "404",
+      "error_description": "Objeto não localizado",
+      "error_source": "OAuthAPI"
+    }
+  ]
 }
 ```
 

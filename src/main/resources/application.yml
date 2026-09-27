@@ -6,8 +6,6 @@ keycloak:
   realm: ${KEYCLOAK_REALM:constrsw}
   client-id: ${KEYCLOAK_CLIENT_ID:oauth}
   client-secret: ${KEYCLOAK_CLIENT_SECRET:wsNXUxaupU9X6jCncsn3rOEy6PDt7oJO}
-  admin-username: ${KEYCLOAK_ADMIN:admin}
-  admin-password: ${KEYCLOAK_ADMIN_PASSWORD:a12345678}
 
 logging:
   level:

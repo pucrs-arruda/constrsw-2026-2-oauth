@@ -35,6 +35,22 @@ class UserControllerIntegrationTest {
     private KeycloakService keycloakService;
 
     @Test
+    void invalidEnabledFilterReturnsBadRequest() throws Exception {
+        mockMvc.perform(get("/users?enabled=invalid"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error_code").value("400"));
+    }
+
+    @Test
+    void malformedUserJsonReturnsBadRequest() throws Exception {
+        mockMvc.perform(post("/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error_code").value("400"));
+    }
+
+    @Test
     @DisplayName("Integração: GET /users deve retornar lista de usuários incluindo role")
     void testGetUsers() throws Exception {
         UserResponse user = new UserResponse("u-1", "joao@pucrs.br", "Joao", "Silva", true, "professor", List.of("professor"));

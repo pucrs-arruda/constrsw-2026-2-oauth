@@ -6,6 +6,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.client.HttpClientErrorException;
@@ -34,17 +37,15 @@ public class GlobalExceptionHandler {
             } else {
                 desc = "Username já existente";
             }
-        } else if (ex.getStatus() == HttpStatus.UNAUTHORIZED) {
-            desc = "username e/ou password inválidos";
         } else if (ex.getStatus() == HttpStatus.FORBIDDEN) {
             desc = "Access token não concede permissão para acessar esse endpoint ou objeto";
         }
 
         List<ErrorItem> stack = new ArrayList<>();
-        String kcMsg = ex.getCause() != null && ex.getCause().getMessage() != null
-                ? ex.getCause().getMessage()
-                : desc;
-        stack.add(new ErrorItem(code, kcMsg, "Keycloak"));
+        if (ex.getCause() instanceof HttpClientErrorException
+                || ex.getCause() instanceof HttpServerErrorException) {
+            stack.add(new ErrorItem(code, ex.getCause().getMessage(), "Keycloak"));
+        }
         stack.add(new ErrorItem(code, desc, "OAuthAPI"));
 
         ErrorResponse errorResponse = new ErrorResponse(code, desc, "OAuthAPI", stack);
@@ -112,6 +113,14 @@ public class GlobalExceptionHandler {
 
         ErrorResponse errorResponse = new ErrorResponse("400", ex.getMessage(), "OAuthAPI", stack);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+    }
+
+    @ExceptionHandler({HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class,
+            HttpMediaTypeNotSupportedException.class})
+    public ResponseEntity<ErrorResponse> handleInvalidRequest(Exception ex) {
+        String description = "Estrutura da chamada inválida";
+        log.warn("Requisição inválida: {}", ex.getMessage());
+        return ResponseEntity.badRequest().body(new ErrorResponse("400", description));
     }
 
     @ExceptionHandler(Exception.class)

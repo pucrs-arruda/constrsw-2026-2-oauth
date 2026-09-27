@@ -8,9 +8,24 @@ import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springdoc.core.customizers.OpenApiCustomizer;
+
+import java.util.List;
 
 @Configuration
 public class OpenApiConfig {
+
+    @Bean
+    public OpenApiCustomizer publicEndpointsCustomizer() {
+        return api -> {
+            if (api.getPaths().get("/login") != null && api.getPaths().get("/login").getPost() != null) {
+                api.getPaths().get("/login").getPost().setSecurity(List.of());
+            }
+            if (api.getPaths().get("/health") != null && api.getPaths().get("/health").getGet() != null) {
+                api.getPaths().get("/health").getGet().setSecurity(List.of());
+            }
+        };
+    }
 
     @Bean
     public OpenAPI customOpenAPI() {

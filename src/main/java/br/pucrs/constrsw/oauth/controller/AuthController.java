@@ -7,6 +7,11 @@ import br.pucrs.constrsw.oauth.dto.ValidateResponse;
 import br.pucrs.constrsw.oauth.exception.KeycloakException;
 import br.pucrs.constrsw.oauth.service.KeycloakService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
@@ -45,6 +50,18 @@ public class AuthController {
      * Suporta multipart/form-data, application/x-www-form-urlencoded e application/json.
      * Retorna 201 Created.
      */
+    @Operation(summary = "Autentica usuário no Keycloak",
+            requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(required = true,
+                    content = {
+                            @Content(mediaType = "multipart/form-data", schema = @Schema(implementation = LoginRequest.class)),
+                            @Content(mediaType = "application/x-www-form-urlencoded", schema = @Schema(implementation = LoginRequest.class))
+                    }))
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Tokens emitidos",
+                    content = @Content(schema = @Schema(implementation = LoginResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Estrutura inválida"),
+            @ApiResponse(responseCode = "401", description = "Credenciais inválidas")
+    })
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(HttpServletRequest servletRequest) {
         String username = servletRequest.getParameter("username");

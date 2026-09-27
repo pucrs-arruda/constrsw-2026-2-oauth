@@ -35,6 +35,16 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void invalidBearerKeepsTokenErrorDescription() {
+        KeycloakException ex = new KeycloakException("401", "Access token inválido", HttpStatus.UNAUTHORIZED);
+        ResponseEntity<ErrorResponse> response = exceptionHandler.handleKeycloakException(ex);
+        assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
+        assertEquals("Access token inválido", response.getBody().getErrorDescription());
+        assertEquals(1, response.getBody().getErrorStack().size());
+        assertEquals("OAuthAPI", response.getBody().getErrorStack().get(0).getErrorSource());
+    }
+
+    @Test
     @DisplayName("Deveria formatar HttpClientErrorException.Conflict com código 409")
     void testHandleHttpClientErrorExceptionConflict() {
         HttpClientErrorException ex = HttpClientErrorException.create(HttpStatus.CONFLICT, "Conflict", null, null, null);
