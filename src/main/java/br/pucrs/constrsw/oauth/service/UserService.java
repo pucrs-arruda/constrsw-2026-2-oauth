@@ -1,44 +1,41 @@
 package br.pucrs.constrsw.oauth.service;
 
-import br.pucrs.constrsw.oauth.client.UserClient;
-import br.pucrs.constrsw.oauth.dto.CreateUserRequest;
-import br.pucrs.constrsw.oauth.dto.UpdatePasswordRequest;
-import br.pucrs.constrsw.oauth.dto.UpdateUserRequest;
-import br.pucrs.constrsw.oauth.dto.UserResponse;
-import org.springframework.stereotype.Service;
+import br.pucrs.constrsw.oauth.domain.CreateUserCommand;
+import br.pucrs.constrsw.oauth.domain.UpdateUserCommand;
+import br.pucrs.constrsw.oauth.domain.User;
+import br.pucrs.constrsw.oauth.port.UserGateway;
 
 import java.util.List;
 
-@Service
 public class UserService {
 
-    private final UserClient userClient;
+    private final UserGateway userGateway;
 
-    public UserService(UserClient userClient) {
-        this.userClient = userClient;
+    public UserService(UserGateway userGateway) {
+        this.userGateway = userGateway;
     }
 
-    public UserResponse create(String authorization, CreateUserRequest request) {
-        return userClient.create(authorization, request);
+    public User create(String authorization, CreateUserCommand command) {
+        return userGateway.create(authorization, command);
     }
 
-    public List<UserResponse> findAll(String authorization) {
-        return userClient.findAll(authorization);
+    public List<User> findAll(String authorization) {
+        return userGateway.findAll(authorization);
     }
 
-    public UserResponse findById(String authorization, String id) {
-        return userClient.findById(authorization, id);
+    public User findById(String authorization, String id) {
+        return userGateway.findById(authorization, id);
     }
 
-    public void update(String authorization, String id, UpdateUserRequest request) {
-        userClient.update(authorization, id, request);
+    public void update(String authorization, String id, UpdateUserCommand command) {
+        userGateway.update(authorization, id, command);
     }
 
-    public void updatePassword(String authorization, String id, UpdatePasswordRequest request) {
-        userClient.updatePassword(authorization, id, request);
+    public void updatePassword(String authorization, String id, String password) {
+        userGateway.updatePassword(authorization, id, password);
     }
 
     public void disable(String authorization, String id) {
-        userClient.disable(authorization, id);
+        userGateway.disable(authorization, id);
     }
 }

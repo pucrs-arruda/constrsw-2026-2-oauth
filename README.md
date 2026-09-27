@@ -2,15 +2,32 @@
 
 REST API for Group 02 that integrates the application with Keycloak.
 
-## Architecture
+## Clean Architecture
 
-The API is stateless and does not store users or roles locally. Keycloak is the identity provider and source of truth.
+The API is stateless. Keycloak remains the source of truth for users and roles;
+the OAuth service does not store them locally. Dependencies point toward the
+application core:
 
 ```text
-HTTP clients -> REST controllers -> application services -> Keycloak REST API
+HTTP -> controller + dto -> service -> port <- client -> Keycloak REST API
+                              |
+                            domain
 ```
 
-`LoginController` and `LoginService` use `KeycloakClient` to exchange user credentials for tokens. Role and role-mapping services call Keycloak Admin REST endpoints. User routes are defined, but their Keycloak client is not implemented yet.
+| Package | Responsibility |
+|---|---|
+| `domain` | Framework-independent user, role, token, and command models. `Role` owns the partial-update merge and logical-delete naming rules. |
+| `port` | Outbound interfaces that describe what the use cases need from an identity provider. No Spring, HTTP, or Keycloak types appear here. |
+| `service` | Plain-Java use cases for login, users, roles, and role mapping. They depend on ports and domain models, never on a Keycloak client or `RestClient`. |
+| `client` | Keycloak adapters implementing the ports. They translate between domain models and Keycloak HTTP requests/responses and map provider failures. |
+| `controller` and `dto` | HTTP input/output adapters. Controllers validate requests, convert API DTOs to domain inputs, call use cases, and convert results back to the existing JSON contract. |
+| `config` | Spring composition root. `UseCaseConfig` wires use cases to their adapters; `RestClientConfig` configures the Keycloak connection. |
+| `error` | API error mapping and shared application exceptions. |
+
+This keeps the application rules testable without Spring or Keycloak. For
+example, a role PATCH fetches the current role through `RoleGateway`, merges
+only provided fields in `Role`, then saves it through the same port. The
+Keycloak adapter can change without changing the use case or HTTP contract.
 
 ## Technology
 
@@ -52,6 +69,9 @@ Docker Compose reads the service configuration from the root `.env` file.
 | `KEYCLOAK_CLIENT_ID` | Keycloak client | `oauth` |
 | `KEYCLOAK_CLIENT_SECRET` | Confidential client secret | Required |
 | `OAUTH_INTERNAL_METRICS_PORT` | HTTP port used by Actuator metrics | `9464` |
+| `GRAFANA_EXTERNAL_PORT` | Grafana UI port on localhost | `3000` |
+| `GRAFANA_ADMIN_USER` | Local Grafana administrator | `admin` |
+| `GRAFANA_ADMIN_PASSWORD` | Local Grafana administrator password | `localdev` |
 
 Inside Docker Compose, `KEYCLOAK_SERVER_URL` points to the `keycloak` service. Keep the client secret outside source control and do not send it from API clients.
 
@@ -63,7 +83,7 @@ When the API is running through Docker Compose:
 - OpenAPI document: <http://localhost:8181/v3/api-docs>
 - Health check: <http://localhost:8181/health>
 
-## Prometheus telemetry
+## Prometheus and Grafana telemetry
 
 From the `base` repository root, start the stack with the Prometheus Compose overlay:
 
@@ -72,13 +92,23 @@ docker compose -f docker-compose.yml -f backend/oauth/docker-compose.prometheus.
 ```
 
 Prometheus is available at <http://localhost:9090>. Its targets page should show
-the `oauth` and `keycloak` jobs as `UP`. The OAuth metrics endpoint is available
+the `oauth`, `keycloak`, and `prometheus` jobs as `UP`. The OAuth metrics endpoint is available
 at <http://localhost:8381/actuator/prometheus> with the default `.env` ports.
 The OAuth Actuator runs on a separate internal port (`9464` by default), while
 the application API remains on port `3001` inside Docker. If the internal
 metrics ports are changed, update `prometheus/prometheus.yml` accordingly.
 For ready-to-use HTTP, latency, JVM, availability, and Prometheus health
 graphs, see [Prometheus graphs](prometheus/GRAPHS.md).
+
+Grafana is available at <http://localhost:3000>, bound to localhost only.
+Sign in with the local-development defaults `admin` / `localdev`, then change
+the password. Set `GRAFANA_ADMIN_USER` and `GRAFANA_ADMIN_PASSWORD` before the
+first start to choose different credentials; existing `grafana-data` volumes
+retain the initial administrator account. Do not use the default password on
+a shared or public deployment. The provisioned Prometheus data source and
+**OAuth and Keycloak Observability** dashboard require no manual setup and
+include availability, HTTP traffic/errors/latency, JVM resources, and scrape
+health. Grafana data persists in the `grafana-data` Docker volume.
 
 ## Endpoints
 
@@ -98,7 +128,7 @@ graphs, see [Prometheus graphs](prometheus/GRAPHS.md).
 | `PUT` | `/roles/{id}` | Replaces a role. Requires a Bearer token. |
 | `PATCH` | `/roles/{id}` | Partially updates a role. Requires a Bearer token. |
 | `DELETE` | `/roles/{id}` | Logically deletes a role by renaming it with the `DELETED_` prefix. Requires a Bearer token. |
-| `POST` | `/users/{id}/roles` | Assigns a role to a user. Requires a Bearer token. |
+| `POST` | `/users/{id}/roles/{roleId}` | Assigns a role to a user. Requires a Bearer token. |
 | `DELETE` | `/users/{id}/roles/{roleId}` | Removes a role from a user. Requires a Bearer token. |
 
 ### Login example
@@ -111,7 +141,6 @@ curl --request POST http://localhost:8181/login \
 
 ## Current limitations
 
-- User routes are present in the API contract, but the Keycloak user-management client is not implemented; these operations currently return HTTP `501`.
 - The API returns a refresh token from login, but does not expose a refresh-token endpoint.
 - The API does not yet expose an endpoint that evaluates access to a Keycloak resource.
 

@@ -5,6 +5,9 @@ import br.pucrs.constrsw.oauth.dto.CreateUserRequest;
 import br.pucrs.constrsw.oauth.dto.UpdatePasswordRequest;
 import br.pucrs.constrsw.oauth.dto.UpdateUserRequest;
 import br.pucrs.constrsw.oauth.dto.UserResponse;
+import br.pucrs.constrsw.oauth.domain.CreateUserCommand;
+import br.pucrs.constrsw.oauth.domain.UpdateUserCommand;
+import br.pucrs.constrsw.oauth.domain.User;
 import br.pucrs.constrsw.oauth.error.UnauthorizedException;
 import br.pucrs.constrsw.oauth.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -67,7 +70,9 @@ public class UserController {
         public ResponseEntity<UserResponse> create(
                         @Parameter(hidden = true) @RequestHeader(value = "Authorization", required = false) String authorization,
                         @Valid @RequestBody CreateUserRequest request) {
-                return ResponseEntity.status(HttpStatus.CREATED).body(userService.create(requireAuth(authorization), request));
+                User user = userService.create(requireAuth(authorization),
+                        new CreateUserCommand(request.username(), request.password(), request.firstName(), request.lastName()));
+                return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(user));
     }
 
     @Operation(summary = "List users", description = "Lists users from the identity provider")
@@ -81,7 +86,8 @@ public class UserController {
     @GetMapping
         public ResponseEntity<List<UserResponse>> findAll(
                         @Parameter(hidden = true) @RequestHeader(value = "Authorization", required = false) String authorization) {
-                return ResponseEntity.ok(userService.findAll(requireAuth(authorization)));
+                return ResponseEntity.ok(userService.findAll(requireAuth(authorization)).stream()
+                        .map(UserController::toResponse).toList());
     }
 
     @Operation(summary = "Get a user", description = "Gets a user by identity provider id")
@@ -98,7 +104,7 @@ public class UserController {
         public ResponseEntity<UserResponse> findById(
                         @Parameter(hidden = true) @RequestHeader(value = "Authorization", required = false) String authorization,
                         @PathVariable String id) {
-                return ResponseEntity.ok(userService.findById(requireAuth(authorization), id));
+                return ResponseEntity.ok(toResponse(userService.findById(requireAuth(authorization), id)));
     }
 
     @Operation(summary = "Update a user", description = "Updates user profile data")
@@ -118,7 +124,8 @@ public class UserController {
                         @Parameter(hidden = true) @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable String id,
             @Valid @RequestBody UpdateUserRequest request) {
-                userService.update(requireAuth(authorization), id, request);
+                userService.update(requireAuth(authorization), id,
+                        new UpdateUserCommand(request.firstName(), request.lastName(), request.enabled()));
         return ResponseEntity.ok().build();
     }
 
@@ -139,7 +146,7 @@ public class UserController {
                         @Parameter(hidden = true) @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable String id,
             @Valid @RequestBody UpdatePasswordRequest request) {
-                userService.updatePassword(requireAuth(authorization), id, request);
+                userService.updatePassword(requireAuth(authorization), id, request.password());
         return ResponseEntity.ok().build();
     }
 
@@ -159,5 +166,12 @@ public class UserController {
                         @PathVariable String id) {
                 userService.disable(requireAuth(authorization), id);
         return ResponseEntity.noContent().build();
+    }
+
+    private static UserResponse toResponse(User user) {
+        if (user == null) {
+            return null;
+        }
+        return new UserResponse(user.id(), user.username(), user.firstName(), user.lastName(), user.enabled());
     }
 }

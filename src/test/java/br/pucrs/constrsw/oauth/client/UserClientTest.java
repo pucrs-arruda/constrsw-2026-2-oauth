@@ -1,8 +1,8 @@
 package br.pucrs.constrsw.oauth.client;
 
 import br.pucrs.constrsw.oauth.config.KeycloakProperties;
-import br.pucrs.constrsw.oauth.dto.CreateUserRequest;
-import br.pucrs.constrsw.oauth.dto.UserResponse;
+import br.pucrs.constrsw.oauth.domain.CreateUserCommand;
+import br.pucrs.constrsw.oauth.domain.User;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -40,9 +40,9 @@ class UserClientTest {
                 .andExpect(header("Authorization", "Bearer user-token"))
                 .andRespond(withSuccess("[{\"id\":\"user-id\",\"username\":\"user@example.com\",\"firstName\":\"First\",\"lastName\":\"Last\",\"enabled\":true}]", MediaType.APPLICATION_JSON));
 
-        UserResponse user = userClient.findAll("Bearer user-token").get(0);
+        User user = userClient.findAll("Bearer user-token").get(0);
 
-        assertThat(user).isEqualTo(new UserResponse(
+        assertThat(user).isEqualTo(new User(
                 "user-id", "user@example.com", "First", "Last", true));
         server.verify();
     }
@@ -68,7 +68,7 @@ class UserClientTest {
                                                                 .andExpect(header("Authorization", "Bearer user-token"))
                 .andRespond(withSuccess().header("Location", "http://keycloak:8080/admin/realms/constrsw/users/user-id"));
 
-        UserResponse user = userClient.create("Bearer user-token", new CreateUserRequest(
+        User user = userClient.create("Bearer user-token", new CreateUserCommand(
                 "user@example.com", "secret", "First", "Last"));
 
         assertThat(user.id()).isEqualTo("user-id");

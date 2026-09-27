@@ -1,26 +1,24 @@
 package br.pucrs.constrsw.oauth.service;
 
-import br.pucrs.constrsw.oauth.client.KeycloakClient;
-import br.pucrs.constrsw.oauth.dto.LoginResponse;
-import br.pucrs.constrsw.oauth.error.InvalidLoginRequestException;
-import org.springframework.stereotype.Service;
+import br.pucrs.constrsw.oauth.domain.AuthTokens;
+import br.pucrs.constrsw.oauth.domain.InvalidLoginRequestException;
+import br.pucrs.constrsw.oauth.port.AuthenticationGateway;
 
-@Service
 public class LoginService {
 
-    private final KeycloakClient keycloakClient;
+    private final AuthenticationGateway authenticationGateway;
 
-    public LoginService(KeycloakClient keycloakClient) {
-        this.keycloakClient = keycloakClient;
+    public LoginService(AuthenticationGateway authenticationGateway) {
+        this.authenticationGateway = authenticationGateway;
     }
 
-    public LoginResponse login(String username, String password) {
+    public AuthTokens login(String username, String password) {
         if (username == null || username.isBlank()) {
             throw new InvalidLoginRequestException("Username is required");
         }
         if (password == null || password.isBlank()) {
             throw new InvalidLoginRequestException("Password is required");
         }
-        return keycloakClient.authenticate(username, password);
+        return authenticationGateway.authenticate(username, password);
     }
 }

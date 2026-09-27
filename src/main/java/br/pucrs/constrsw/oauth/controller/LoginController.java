@@ -2,6 +2,7 @@ package br.pucrs.constrsw.oauth.controller;
 
 import br.pucrs.constrsw.oauth.dto.ApiErrorResponse;
 import br.pucrs.constrsw.oauth.dto.LoginResponse;
+import br.pucrs.constrsw.oauth.domain.AuthTokens;
 import br.pucrs.constrsw.oauth.service.LoginService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -40,7 +41,9 @@ public class LoginController {
     public ResponseEntity<LoginResponse> login(
             @RequestPart(required = false) String username,
             @RequestPart(required = false) String password) {
-        LoginResponse response = loginService.login(username, password);
+        AuthTokens tokens = loginService.login(username, password);
+        LoginResponse response = new LoginResponse(tokens.tokenType(), tokens.accessToken(), tokens.expiresIn(),
+                tokens.refreshToken(), tokens.refreshExpiresIn());
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 }

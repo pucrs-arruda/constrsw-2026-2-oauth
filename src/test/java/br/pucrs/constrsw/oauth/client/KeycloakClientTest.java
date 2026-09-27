@@ -1,7 +1,7 @@
 package br.pucrs.constrsw.oauth.client;
 
 import br.pucrs.constrsw.oauth.config.KeycloakProperties;
-import br.pucrs.constrsw.oauth.dto.LoginResponse;
+import br.pucrs.constrsw.oauth.domain.AuthTokens;
 import br.pucrs.constrsw.oauth.error.InvalidCredentialsException;
 import br.pucrs.constrsw.oauth.error.KeycloakCommunicationException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -60,7 +60,7 @@ class KeycloakClientTest {
                         }
                         """, MediaType.APPLICATION_JSON));
 
-        LoginResponse response = keycloakClient.authenticate("user@example.com", "secret");
+        AuthTokens response = keycloakClient.authenticate("user@example.com", "secret");
 
         assertThat(response.accessToken()).isEqualTo("access-token");
         assertThat(response.refreshToken()).isEqualTo("refresh-token");

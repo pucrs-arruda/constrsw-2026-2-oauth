@@ -1,9 +1,9 @@
 package br.pucrs.constrsw.oauth.controller;
 
-import br.pucrs.constrsw.oauth.dto.LoginResponse;
+import br.pucrs.constrsw.oauth.domain.AuthTokens;
 import br.pucrs.constrsw.oauth.error.GlobalExceptionHandler;
 import br.pucrs.constrsw.oauth.error.InvalidCredentialsException;
-import br.pucrs.constrsw.oauth.error.InvalidLoginRequestException;
+import br.pucrs.constrsw.oauth.domain.InvalidLoginRequestException;
 import br.pucrs.constrsw.oauth.service.LoginService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,7 +32,7 @@ class LoginControllerTest {
 
     @Test
     void returnsCreatedWithTokensForValidCredentials() throws Exception {
-        LoginResponse response = new LoginResponse("Bearer", "access-token", 300, "refresh-token", 1800);
+        AuthTokens response = new AuthTokens("Bearer", "access-token", 300, "refresh-token", 1800);
         when(loginService.login("user@example.com", "secret")).thenReturn(response);
 
         mockMvc.perform(multipart("/login")

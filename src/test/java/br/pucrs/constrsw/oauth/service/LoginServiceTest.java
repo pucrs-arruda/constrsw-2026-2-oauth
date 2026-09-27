@@ -1,7 +1,7 @@
 package br.pucrs.constrsw.oauth.service;
 
-import br.pucrs.constrsw.oauth.client.KeycloakClient;
-import br.pucrs.constrsw.oauth.error.InvalidLoginRequestException;
+import br.pucrs.constrsw.oauth.port.AuthenticationGateway;
+import br.pucrs.constrsw.oauth.domain.InvalidLoginRequestException;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -10,8 +10,8 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 class LoginServiceTest {
 
-    private final KeycloakClient keycloakClient = mock(KeycloakClient.class);
-    private final LoginService loginService = new LoginService(keycloakClient);
+    private final AuthenticationGateway authenticationGateway = mock(AuthenticationGateway.class);
+    private final LoginService loginService = new LoginService(authenticationGateway);
 
     @Test
     void rejectsBlankUsername() {
@@ -19,7 +19,7 @@ class LoginServiceTest {
                 .isInstanceOf(InvalidLoginRequestException.class)
                 .hasMessage("Username is required");
 
-        verifyNoInteractions(keycloakClient);
+        verifyNoInteractions(authenticationGateway);
     }
 
     @Test
@@ -28,6 +28,6 @@ class LoginServiceTest {
                 .isInstanceOf(InvalidLoginRequestException.class)
                 .hasMessage("Password is required");
 
-        verifyNoInteractions(keycloakClient);
+        verifyNoInteractions(authenticationGateway);
     }
 }

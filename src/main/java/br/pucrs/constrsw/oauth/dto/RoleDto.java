@@ -1,5 +1,6 @@
 package br.pucrs.constrsw.oauth.dto;
 
+import br.pucrs.constrsw.oauth.domain.Role;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
@@ -54,5 +55,16 @@ public class RoleDto {
 
     public void setAttributes(Map<String, Object> attributes) {
         this.attributes = attributes;
+    }
+
+    public Role toDomain() {
+        return new Role(id, name, description, attributes);
+    }
+
+    public static RoleDto fromDomain(Role role) {
+        if (role == null) {
+            return null;
+        }
+        return new RoleDto(role.id(), role.name(), role.description(), role.attributes());
     }
 }

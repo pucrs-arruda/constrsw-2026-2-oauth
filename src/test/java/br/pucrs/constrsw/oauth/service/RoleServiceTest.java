@@ -1,75 +1,50 @@
 package br.pucrs.constrsw.oauth.service;
 
-import br.pucrs.constrsw.oauth.config.KeycloakProperties;
-import br.pucrs.constrsw.oauth.dto.RoleDto;
-import br.pucrs.constrsw.oauth.error.KeycloakServiceException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.BeforeEach;
+import br.pucrs.constrsw.oauth.domain.Role;
+import br.pucrs.constrsw.oauth.domain.RoleNotFoundException;
+import br.pucrs.constrsw.oauth.port.RoleGateway;
 import org.junit.jupiter.api.Test;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.MediaType;
-import org.springframework.test.web.client.MockRestServiceServer;
-import org.springframework.web.client.RestClient;
-
-import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.springframework.test.web.client.ExpectedCount.once;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
-import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
-import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
-import static org.springframework.http.HttpStatus.NOT_FOUND;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
 class RoleServiceTest {
 
-    private MockRestServiceServer server;
-    private RoleService roleService;
+    private final RoleGateway gateway = mock(RoleGateway.class);
+    private final RoleService service = new RoleService(gateway);
 
-    @BeforeEach
-    void setUp() {
-        RestClient.Builder builder = RestClient.builder().baseUrl("http://keycloak:8080");
-        server = MockRestServiceServer.bindTo(builder).build();
-        roleService = new RoleService(builder.build(),
-                new KeycloakProperties("http://keycloak:8080", "constrsw", "oauth", "secret"),
-                new ObjectMapper());
+    @Test
+    void mergesOnlyProvidedFieldsWhenPatchingRole() {
+        Role existing = new Role("role-id", "admin", "Administrator", null);
+        Role partial = new Role(null, "editor", null, null);
+        Role merged = new Role("role-id", "editor", "Administrator", null);
+        when(gateway.getRoleById("Bearer token", "role-id")).thenReturn(existing);
+        when(gateway.updateRole("Bearer token", "role-id", merged)).thenReturn(merged);
+
+        assertThat(service.patchRole("Bearer token", "role-id", partial)).isEqualTo(merged);
+        verify(gateway).updateRole("Bearer token", "role-id", merged);
     }
 
     @Test
-    void createsRole() {
-        server.expect(once(), requestTo("http://keycloak:8080/admin/realms/constrsw/roles"))
-                .andExpect(method(HttpMethod.POST))
-                .andRespond(withSuccess("{\"id\":\"role-id\",\"name\":\"admin\"}", MediaType.APPLICATION_JSON));
+    void marksRoleDeletedWithoutRemovingItFromKeycloak() {
+        Role existing = new Role("role-id", "admin", "Administrator", null);
+        when(gateway.getRoleById("Bearer token", "role-id")).thenReturn(existing);
 
-        RoleDto result = roleService.createRole("Bearer token", new RoleDto(null, "admin", null, null));
+        service.deleteRole("Bearer token", "role-id");
 
-        assertThat(result.getId()).isEqualTo("role-id");
-        assertThat(result.getName()).isEqualTo("admin");
-        server.verify();
+        verify(gateway).updateRole("Bearer token", "role-id", existing.markedDeleted());
     }
 
     @Test
-    void listsRoles() {
-        server.expect(once(), requestTo("http://keycloak:8080/admin/realms/constrsw/roles"))
-                .andExpect(method(HttpMethod.GET))
-                .andRespond(withSuccess("[{\"id\":\"role-id\",\"name\":\"admin\"}]", MediaType.APPLICATION_JSON));
-
-        List<RoleDto> result = roleService.getAllRoles("Bearer token");
-
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).getName()).isEqualTo("admin");
-        server.verify();
-    }
-
-    @Test
-    void mapsKeycloakErrors() {
-        server.expect(once(), requestTo("http://keycloak:8080/admin/realms/constrsw/roles-by-id/missing"))
-                .andRespond(withStatus(NOT_FOUND).body("{\"error\":\"not found\"}"));
-
-        assertThatThrownBy(() -> roleService.getRoleById("Bearer token", "missing"))
-                .isInstanceOf(KeycloakServiceException.class)
-                .hasMessageContaining("Failed to retrieve role");
-        server.verify();
+    void rejectsLogicalDeletionWhenRoleDoesNotExist() {
+        assertThatThrownBy(() -> service.deleteRole("Bearer token", "missing"))
+                .isInstanceOf(RoleNotFoundException.class)
+                .hasMessage("Role not found");
+        verify(gateway).getRoleById("Bearer token", "missing");
+        verifyNoMoreInteractions(gateway);
     }
 }

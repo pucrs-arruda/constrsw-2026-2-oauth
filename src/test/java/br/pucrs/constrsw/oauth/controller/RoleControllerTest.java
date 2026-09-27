@@ -1,6 +1,7 @@
 package br.pucrs.constrsw.oauth.controller;
 
-import br.pucrs.constrsw.oauth.dto.RoleDto;
+import br.pucrs.constrsw.oauth.domain.Role;
+import br.pucrs.constrsw.oauth.domain.RoleNotFoundException;
 import br.pucrs.constrsw.oauth.error.GlobalExceptionHandler;
 import br.pucrs.constrsw.oauth.service.RoleService;
 import org.junit.jupiter.api.Test;
@@ -13,6 +14,7 @@ import java.util.List;
 
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -37,8 +39,8 @@ class RoleControllerTest {
 
     @Test
     void createsRoleWithBearerToken() throws Exception {
-        RoleDto role = new RoleDto("role-id", "admin", "Administrator", null);
-        when(roleService.createRole(eq("Bearer token"), any(RoleDto.class))).thenReturn(role);
+        Role role = new Role("role-id", "admin", "Administrator", null);
+        when(roleService.createRole(eq("Bearer token"), any(Role.class))).thenReturn(role);
 
         mockMvc.perform(post("/roles")
                         .header("Authorization", "Bearer token")
@@ -51,7 +53,7 @@ class RoleControllerTest {
                 .andExpect(jsonPath("$.name").value("admin"));
 
         verify(roleService).createRole(eq("Bearer token"), argThat(value ->
-            "role-id".equals(value.getId()) && "admin".equals(value.getName())));
+            "role-id".equals(value.id()) && "admin".equals(value.name())));
     }
 
     @Test
@@ -66,7 +68,7 @@ class RoleControllerTest {
     @Test
     void listsRoles() throws Exception {
         when(roleService.getAllRoles("Bearer token")).thenReturn(List.of(
-                new RoleDto("role-id", "admin", "Administrator", null)));
+                new Role("role-id", "admin", "Administrator", null)));
 
         mockMvc.perform(get("/roles").header("Authorization", "Bearer token"))
                 .andExpect(status().isOk())
@@ -77,7 +79,7 @@ class RoleControllerTest {
 
     @Test
     void getsRoleById() throws Exception {
-        RoleDto role = new RoleDto("role-id", "admin", "Administrator", null);
+        Role role = new Role("role-id", "admin", "Administrator", null);
         when(roleService.getRoleById("Bearer token", "role-id")).thenReturn(role);
 
         mockMvc.perform(get("/roles/role-id").header("Authorization", "Bearer token"))
@@ -89,8 +91,8 @@ class RoleControllerTest {
 
     @Test
     void updatesRole() throws Exception {
-        RoleDto role = new RoleDto("role-id", "admin", "Updated", null);
-        when(roleService.updateRole(eq("Bearer token"), eq("role-id"), any(RoleDto.class))).thenReturn(role);
+        Role role = new Role("role-id", "admin", "Updated", null);
+        when(roleService.updateRole(eq("Bearer token"), eq("role-id"), any(Role.class))).thenReturn(role);
 
         mockMvc.perform(put("/roles/role-id")
                         .header("Authorization", "Bearer token")
@@ -102,13 +104,13 @@ class RoleControllerTest {
                 .andExpect(jsonPath("$.description").value("Updated"));
 
         verify(roleService).updateRole(eq("Bearer token"), eq("role-id"), argThat(value ->
-            "role-id".equals(value.getId()) && "Updated".equals(value.getDescription())));
+            "role-id".equals(value.id()) && "Updated".equals(value.description())));
     }
 
     @Test
     void patchesRole() throws Exception {
-        RoleDto partial = new RoleDto(null, "editor", null, null);
-        when(roleService.patchRole(eq("Bearer token"), eq("role-id"), any(RoleDto.class))).thenReturn(partial);
+        Role partial = new Role(null, "editor", null, null);
+        when(roleService.patchRole(eq("Bearer token"), eq("role-id"), any(Role.class))).thenReturn(partial);
 
         mockMvc.perform(patch("/roles/role-id")
                         .header("Authorization", "Bearer token")
@@ -120,7 +122,7 @@ class RoleControllerTest {
                 .andExpect(jsonPath("$.name").value("editor"));
 
         verify(roleService).patchRole(eq("Bearer token"), eq("role-id"), argThat(value ->
-            "editor".equals(value.getName())));
+            "editor".equals(value.name())));
     }
 
     @Test
@@ -130,5 +132,14 @@ class RoleControllerTest {
                 .andExpect(content().string(""));
 
         verify(roleService).deleteRole("Bearer token", "role-id");
+    }
+
+    @Test
+    void returnsNotFoundWhenRoleIsMissing() throws Exception {
+        doThrow(new RoleNotFoundException()).when(roleService).deleteRole("Bearer token", "missing");
+
+        mockMvc.perform(delete("/roles/missing").header("Authorization", "Bearer token"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error_description").value("Role not found"));
     }
 }

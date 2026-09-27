@@ -1,9 +1,8 @@
 package br.pucrs.constrsw.oauth.controller;
 
-import br.pucrs.constrsw.oauth.dto.CreateUserRequest;
-import br.pucrs.constrsw.oauth.dto.UpdatePasswordRequest;
-import br.pucrs.constrsw.oauth.dto.UpdateUserRequest;
-import br.pucrs.constrsw.oauth.dto.UserResponse;
+import br.pucrs.constrsw.oauth.domain.CreateUserCommand;
+import br.pucrs.constrsw.oauth.domain.UpdateUserCommand;
+import br.pucrs.constrsw.oauth.domain.User;
 import br.pucrs.constrsw.oauth.error.GlobalExceptionHandler;
 import br.pucrs.constrsw.oauth.service.UserService;
 import org.junit.jupiter.api.Test;
@@ -40,9 +39,9 @@ class UserControllerTest {
 
     @Test
     void returnsCreatedUserAndDelegatesCreation() throws Exception {
-        CreateUserRequest request = new CreateUserRequest(
+        CreateUserCommand request = new CreateUserCommand(
                 "user@example.com", "secret", "First", "Last");
-        UserResponse response = new UserResponse(
+        User response = new User(
                 "user-id", "user@example.com", "First", "Last", true);
         when(userService.create(AUTHORIZATION, request)).thenReturn(response);
 
@@ -90,7 +89,7 @@ class UserControllerTest {
     @Test
     void returnsUsersFromService() throws Exception {
         when(userService.findAll(AUTHORIZATION)).thenReturn(List.of(
-                new UserResponse("user-id", "user@example.com", "First", "Last", true)));
+                new User("user-id", "user@example.com", "First", "Last", true)));
 
         mockMvc.perform(get("/users").header("Authorization", AUTHORIZATION))
                 .andExpect(status().isOk())
@@ -103,7 +102,7 @@ class UserControllerTest {
     @Test
     void returnsUserById() throws Exception {
         when(userService.findById(AUTHORIZATION, "user-id")).thenReturn(
-                new UserResponse("user-id", "user@example.com", "First", "Last", true));
+                new User("user-id", "user@example.com", "First", "Last", true));
 
         mockMvc.perform(get("/users/user-id").header("Authorization", AUTHORIZATION))
                 .andExpect(status().isOk())
@@ -114,7 +113,7 @@ class UserControllerTest {
 
     @Test
     void updatesUserAndReturnsOk() throws Exception {
-        UpdateUserRequest request = new UpdateUserRequest("Updated", "User", false);
+        UpdateUserCommand request = new UpdateUserCommand("Updated", "User", false);
 
         mockMvc.perform(put("/users/user-id")
                         .header("Authorization", AUTHORIZATION)
@@ -134,8 +133,6 @@ class UserControllerTest {
 
     @Test
     void updatesPasswordAndReturnsOk() throws Exception {
-        UpdatePasswordRequest request = new UpdatePasswordRequest("new-secret");
-
         mockMvc.perform(patch("/users/user-id")
                         .header("Authorization", AUTHORIZATION)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -143,7 +140,7 @@ class UserControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(""));
 
-        verify(userService).updatePassword(AUTHORIZATION, "user-id", request);
+        verify(userService).updatePassword(AUTHORIZATION, "user-id", "new-secret");
     }
 
     @Test

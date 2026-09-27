@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import br.pucrs.constrsw.oauth.dto.ApiErrorResponse;
 import br.pucrs.constrsw.oauth.dto.RoleDto;
+import br.pucrs.constrsw.oauth.domain.Role;
 import br.pucrs.constrsw.oauth.error.UnauthorizedException;
 import br.pucrs.constrsw.oauth.service.RoleService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -57,8 +58,8 @@ public class RoleController {
             @Parameter(hidden = true) @RequestHeader(value = "Authorization", required = false) String authorization,
             @RequestBody RoleDto role) {
         String auth = requireAuth(authorization);
-        RoleDto created = roleService.createRole(auth, role);
-        return ResponseEntity.status(HttpStatus.CREATED).body(created);
+        Role created = roleService.createRole(auth, role.toDomain());
+        return ResponseEntity.status(HttpStatus.CREATED).body(RoleDto.fromDomain(created));
     }
 
     @Operation(summary = "List roles", description = "Lists roles from Keycloak")
@@ -70,8 +71,8 @@ public class RoleController {
     public ResponseEntity<List<RoleDto>> getAll(
             @Parameter(hidden = true) @RequestHeader(value = "Authorization", required = false) String authorization) {
         String auth = requireAuth(authorization);
-        List<RoleDto> roles = roleService.getAllRoles(auth);
-        return ResponseEntity.ok(roles);
+        List<Role> roles = roleService.getAllRoles(auth);
+        return ResponseEntity.ok(roles == null ? null : roles.stream().map(RoleDto::fromDomain).toList());
     }
 
     @Operation(summary = "Get a role", description = "Gets a role by Keycloak id")
@@ -85,8 +86,8 @@ public class RoleController {
             @Parameter(hidden = true) @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable String id) {
         String auth = requireAuth(authorization);
-        RoleDto role = roleService.getRoleById(auth, id);
-        return ResponseEntity.ok(role);
+        Role role = roleService.getRoleById(auth, id);
+        return ResponseEntity.ok(RoleDto.fromDomain(role));
     }
 
     @Operation(summary = "Update a role", description = "Updates an existing role")
@@ -101,8 +102,8 @@ public class RoleController {
             @PathVariable String id,
             @RequestBody RoleDto role) {
         String auth = requireAuth(authorization);
-        RoleDto updated = roleService.updateRole(auth, id, role);
-        return ResponseEntity.ok(updated);
+        Role updated = roleService.updateRole(auth, id, role.toDomain());
+        return ResponseEntity.ok(RoleDto.fromDomain(updated));
     }
 
     @Operation(summary = "Partially update a role", description = "Updates specific role attributes")
@@ -117,8 +118,8 @@ public class RoleController {
             @PathVariable String id,
             @RequestBody RoleDto partial) {
         String auth = requireAuth(authorization);
-        RoleDto updated = roleService.patchRole(auth, id, partial);
-        return ResponseEntity.ok(updated);
+        Role updated = roleService.patchRole(auth, id, partial.toDomain());
+        return ResponseEntity.ok(RoleDto.fromDomain(updated));
     }
 
     @Operation(summary = "Disable a role", description = "Logically deletes a role by disabling it in Keycloak")

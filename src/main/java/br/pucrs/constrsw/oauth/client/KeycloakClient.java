@@ -1,9 +1,11 @@
 package br.pucrs.constrsw.oauth.client;
 
 import br.pucrs.constrsw.oauth.config.KeycloakProperties;
+import br.pucrs.constrsw.oauth.domain.AuthTokens;
 import br.pucrs.constrsw.oauth.dto.LoginResponse;
 import br.pucrs.constrsw.oauth.error.InvalidCredentialsException;
 import br.pucrs.constrsw.oauth.error.KeycloakCommunicationException;
+import br.pucrs.constrsw.oauth.port.AuthenticationGateway;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -17,7 +19,7 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
 @Component
-public class KeycloakClient {
+public class KeycloakClient implements AuthenticationGateway {
 
     private final RestClient restClient;
     private final KeycloakProperties properties;
@@ -29,7 +31,8 @@ public class KeycloakClient {
         this.objectMapper = objectMapper;
     }
 
-    public LoginResponse authenticate(String username, String password) {
+    @Override
+    public AuthTokens authenticate(String username, String password) {
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
         form.add("client_id", properties.clientId());
         form.add("client_secret", properties.clientSecret());
@@ -48,7 +51,8 @@ public class KeycloakClient {
             if (response == null) {
                 throw new KeycloakCommunicationException("Identity provider returned an empty response", null);
             }
-            return response;
+            return new AuthTokens(response.tokenType(), response.accessToken(), response.expiresIn(),
+                    response.refreshToken(), response.refreshExpiresIn());
         } catch (RestClientResponseException exception) {
             if (exception.getStatusCode() == HttpStatus.BAD_REQUEST && isInvalidGrant(exception)) {
                 throw new InvalidCredentialsException();
