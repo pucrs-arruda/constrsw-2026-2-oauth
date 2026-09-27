@@ -18,6 +18,7 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.actuate.observability.AutoConfigureObservability;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -37,15 +38,21 @@ import br.pucrs.constrsw.oauth.application.port.in.GetUserUseCase;
 import br.pucrs.constrsw.oauth.application.port.in.ListRolesUseCase;
 import br.pucrs.constrsw.oauth.application.port.in.ListUsersUseCase;
 import br.pucrs.constrsw.oauth.application.port.in.LoginUseCase;
+import br.pucrs.constrsw.oauth.application.port.in.ReplaceRoleUseCase;
 import br.pucrs.constrsw.oauth.application.port.in.UpdateRoleUseCase;
 import br.pucrs.constrsw.oauth.application.port.in.UpdateUserUseCase;
 import br.pucrs.constrsw.oauth.application.port.in.UpdatePasswordUseCase;
+import br.pucrs.constrsw.oauth.domain.exception.UpstreamErrorException;
+import br.pucrs.constrsw.oauth.domain.exception.UserAlreadyExistsException;
 import br.pucrs.constrsw.oauth.domain.model.AuthTokens;
 import br.pucrs.constrsw.oauth.domain.model.Role;
 import br.pucrs.constrsw.oauth.domain.model.User;
 
 @SpringBootTest(classes = OauthApplication.class)
 @AutoConfigureMockMvc
+// Nos testes o Spring Boot desliga a exportacao de metricas por padrao; isto religa
+// o registry do Prometheus para testar o /actuator/prometheus.
+@AutoConfigureObservability
 class RestControllersIntegrationTest {
 
   @Autowired
@@ -75,6 +82,8 @@ class RestControllersIntegrationTest {
   @MockBean
   private GetRoleUseCase getRoleUseCase;
   @MockBean
+  private ReplaceRoleUseCase replaceRoleUseCase;
+  @MockBean
   private UpdateRoleUseCase updateRoleUseCase;
   @MockBean
   private DeleteRoleUseCase deleteRoleUseCase;
@@ -94,6 +103,37 @@ class RestControllersIntegrationTest {
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.access_token").value("access-token"))
         .andExpect(jsonPath("$.token_type").value("Bearer"));
+  }
+
+  @Test
+  void loginAlsoAcceptsUrlEncodedForm() throws Exception {
+    when(loginUseCase.execute(any()))
+        .thenReturn(new AuthTokens("Bearer", "access-token", 300L, "refresh-token", 1800L));
+
+    mockMvc.perform(post("/login")
+        .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+        .content("username=ana%40example.com&password=secret"))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.access_token").value("access-token"));
+  }
+
+  @Test
+  void errorStackListsKeycloakErrorBeforeFinalApiError() throws Exception {
+    UserAlreadyExistsException error = new UserAlreadyExistsException("ana@example.com");
+    error.initCause(new UpstreamErrorException("Keycloak", 409, "HTTP 409 - User exists with same username"));
+    when(createUserUseCase.execute(nullable(String.class), any())).thenThrow(error);
+
+    mockMvc.perform(post("/users").with(jwt())
+        .contentType(MediaType.APPLICATION_JSON)
+        .content("{\"username\":\"ana@example.com\",\"password\":\"secret\"}"))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.error_code").value("409"))
+        .andExpect(jsonPath("$.error_source").value("OAuthAPI"))
+        .andExpect(jsonPath("$.error_stack.length()").value(2))
+        .andExpect(jsonPath("$.error_stack[0].source").value("Keycloak"))
+        .andExpect(jsonPath("$.error_stack[0].message").value("HTTP 409 - User exists with same username"))
+        .andExpect(jsonPath("$.error_stack[1].source").value("OAuthAPI"))
+        .andExpect(jsonPath("$.error_stack[1].type").value("UserAlreadyExistsException"));
   }
 
   @Test
@@ -158,7 +198,7 @@ class RestControllersIntegrationTest {
         .andExpect(jsonPath("$.name").value("teacher"));
     mockMvc.perform(put("/roles/r1").with(jwt())
         .contentType(MediaType.APPLICATION_JSON)
-        .content("{\"description\":\"Updated\"}"))
+        .content("{\"name\":\"teacher\",\"description\":\"Updated\"}"))
         .andExpect(status().isOk());
     mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/roles/r1").with(jwt())
         .contentType(MediaType.APPLICATION_JSON)
@@ -172,13 +212,23 @@ class RestControllersIntegrationTest {
         .andExpect(status().isNoContent());
 
     verify(listRolesUseCase).execute(nullable(String.class), org.mockito.ArgumentMatchers.eq(true));
-    verify(updateRoleUseCase, org.mockito.Mockito.times(2))
-        .execute(nullable(String.class), org.mockito.ArgumentMatchers.eq("r1"), any());
+    verify(replaceRoleUseCase).execute(nullable(String.class), org.mockito.ArgumentMatchers.eq("r1"), any());
+    verify(updateRoleUseCase).execute(nullable(String.class), org.mockito.ArgumentMatchers.eq("r1"), any());
     verify(attachRoleToUserUseCase).execute(nullable(String.class), org.mockito.ArgumentMatchers.eq("u1"),
         org.mockito.ArgumentMatchers.eq("r1"));
     verify(detachRoleFromUserUseCase).execute(nullable(String.class), org.mockito.ArgumentMatchers.eq("u1"),
         org.mockito.ArgumentMatchers.eq("r1"));
     verify(deleteRoleUseCase).execute(nullable(String.class), org.mockito.ArgumentMatchers.eq("r1"));
+  }
+
+  @Test
+  void putRoleRequiresNameBecauseItReplacesTheWholeRole() throws Exception {
+    mockMvc.perform(put("/roles/r1").with(jwt())
+        .contentType(MediaType.APPLICATION_JSON)
+        .content("{\"description\":\"sem nome\"}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.error_code").value("400"));
+    org.mockito.Mockito.verifyNoInteractions(replaceRoleUseCase);
   }
 
   @Test
@@ -188,8 +238,17 @@ class RestControllersIntegrationTest {
   }
 
   @Test
-  void prometheusEndpointIsExposedForAuthenticatedScrapers() throws Exception {
-    mockMvc.perform(get("/actuator/prometheus").with(jwt()))
+  void unknownRouteReturnsNotFoundEnvelope() throws Exception {
+    mockMvc.perform(get("/rota-inexistente").with(jwt()))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.error_code").value("404"));
+  }
+
+  @Test
+  void prometheusEndpointIsPublicForScrapers() throws Exception {
+    // Gera ao menos uma requisicao para que http_server_requests exista na coleta
+    mockMvc.perform(get("/users")).andExpect(status().isUnauthorized());
+    mockMvc.perform(get("/actuator/prometheus"))
         .andExpect(status().isOk())
         .andExpect(content().string(org.hamcrest.Matchers.containsString("http_server_requests")));
   }

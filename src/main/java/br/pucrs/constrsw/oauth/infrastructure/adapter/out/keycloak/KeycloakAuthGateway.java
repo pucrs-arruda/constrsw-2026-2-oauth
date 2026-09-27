@@ -73,10 +73,12 @@ public class KeycloakAuthGateway implements AuthGateway {
 
             String error = body == null ? "" : String.valueOf(body.getOrDefault("error", ""));
             if (status.value() == 401 || "invalid_grant".equalsIgnoreCase(error)) {
-                throw new InvalidCredentialsException("Username e/ou password invalidos.");
+                throw new InvalidCredentialsException("Username e/ou password invalidos.",
+                        KeycloakErrors.upstream(status.value(), body));
             }
             throw new IdentityProviderUnavailableException(
-                    "Erro inesperado do Keycloak (" + status + "): " + body);
+                    "Erro inesperado do Keycloak (" + status + "): " + body,
+                    KeycloakErrors.upstream(status.value(), body));
 
         } catch (ResourceAccessException ex) {
             log.error("Keycloak inacessivel em {}", properties.tokenEndpoint(), ex);

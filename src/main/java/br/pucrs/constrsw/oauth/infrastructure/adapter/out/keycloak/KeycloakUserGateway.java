@@ -1,5 +1,7 @@
 package br.pucrs.constrsw.oauth.infrastructure.adapter.out.keycloak;
 
+import static br.pucrs.constrsw.oauth.infrastructure.adapter.out.keycloak.KeycloakErrors.causedBy;
+
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -27,6 +29,7 @@ import br.pucrs.constrsw.oauth.domain.exception.AuthorizationRequiredException;
 import br.pucrs.constrsw.oauth.domain.exception.IdentityProviderUnavailableException;
 import br.pucrs.constrsw.oauth.domain.exception.InvalidInputException;
 import br.pucrs.constrsw.oauth.domain.exception.UserAlreadyExistsException;
+import br.pucrs.constrsw.oauth.domain.exception.UpstreamErrorException;
 import br.pucrs.constrsw.oauth.domain.exception.UserNotFoundException;
 import br.pucrs.constrsw.oauth.domain.model.NewUser;
 import br.pucrs.constrsw.oauth.domain.model.User;
@@ -241,14 +244,17 @@ public class KeycloakUserGateway implements UserGateway {
     private void translateError(HttpStatusCode status, Object body, String username, String id) {
         int code = status.value();
         String description = extractErrorMessage(body);
-        if (code == 400) throw new InvalidInputException(description);
-        if (code == 401) throw new AuthorizationRequiredException("Invalid or expired access token");
-        if (code == 403) throw new AccessDeniedException(
-                "Access token does not grant permission for this operation");
-        if (code == 404) throw new UserNotFoundException(id != null ? id : "");
-        if (code == 409) throw new UserAlreadyExistsException(username != null ? username : "");
+        UpstreamErrorException upstream = KeycloakErrors.upstream(code, body);
+        if (code == 400) throw causedBy(new InvalidInputException(
+                description.isEmpty() ? "Invalid request for Keycloak" : description), upstream);
+        if (code == 401) throw causedBy(new AuthorizationRequiredException(
+                "Invalid or expired access token"), upstream);
+        if (code == 403) throw causedBy(new AccessDeniedException(
+                "Access token does not grant permission for this operation"), upstream);
+        if (code == 404) throw causedBy(new UserNotFoundException(id != null ? id : ""), upstream);
+        if (code == 409) throw causedBy(new UserAlreadyExistsException(username != null ? username : ""), upstream);
         throw new IdentityProviderUnavailableException(
-                "Unexpected Keycloak response " + code + ": " + description);
+                "Unexpected Keycloak response " + code + ": " + description, upstream);
     }
 
     private String extractErrorMessage(Object body) {

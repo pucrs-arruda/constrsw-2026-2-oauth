@@ -29,6 +29,7 @@ import br.pucrs.constrsw.oauth.infrastructure.adapter.in.rest.dto.UserCreateRequ
 import br.pucrs.constrsw.oauth.infrastructure.adapter.in.rest.dto.UserResponseDto;
 import br.pucrs.constrsw.oauth.infrastructure.adapter.in.rest.dto.UserUpdateRequestDto;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -43,6 +44,13 @@ import jakarta.validation.Valid;
 @RestController
 @RequestMapping("/users")
 @Tag(name = "Users", description = "Gestao de usuarios (proxy do Keycloak Admin API)")
+// Codigos comuns a todas as rotas; 404/409 ficam nos metodos em que se aplicam.
+@ApiResponse(responseCode = "400", description = "Bad Request - erro na estrutura da chamada",
+        content = @Content(schema = @Schema(implementation = ErrorResponseDto.class)))
+@ApiResponse(responseCode = "401", description = "Unauthorized - access token ausente ou invalido",
+        content = @Content(schema = @Schema(implementation = ErrorResponseDto.class)))
+@ApiResponse(responseCode = "403", description = "Forbidden - access token nao concede permissao",
+        content = @Content(schema = @Schema(implementation = ErrorResponseDto.class)))
 public class UserRestController {
 
     private final CreateUserUseCase createUser;
@@ -69,13 +77,7 @@ public class UserRestController {
     @Operation(summary = "Cria um novo usuario")
     @ApiResponse(responseCode = "201", description = "Created",
             content = @Content(schema = @Schema(implementation = UserResponseDto.class)))
-    @ApiResponse(responseCode = "400", description = "Bad Request",
-            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class)))
-    @ApiResponse(responseCode = "401", description = "Unauthorized",
-            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class)))
-    @ApiResponse(responseCode = "403", description = "Forbidden",
-            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class)))
-    @ApiResponse(responseCode = "409", description = "Conflict",
+    @ApiResponse(responseCode = "409", description = "Conflict - username ja existente",
             content = @Content(schema = @Schema(implementation = ErrorResponseDto.class)))
     @PostMapping
     public ResponseEntity<UserResponseDto> create(
@@ -86,7 +88,8 @@ public class UserRestController {
     }
 
     @Operation(summary = "Lista todos os usuarios, opcionalmente filtrando por enabled.")
-    @ApiResponse(responseCode = "200", description = "OK")
+    @ApiResponse(responseCode = "200", description = "OK",
+            content = @Content(array = @ArraySchema(schema = @Schema(implementation = UserResponseDto.class))))
     @GetMapping
     public ResponseEntity<List<UserResponseDto>> list(
             @RequestHeader(value = "Authorization", required = false) String bearer,
@@ -98,8 +101,9 @@ public class UserRestController {
     }
 
     @Operation(summary = "Recupera um usuario pelo id.")
-    @ApiResponse(responseCode = "200", description = "OK")
-    @ApiResponse(responseCode = "404", description = "Not Found",
+    @ApiResponse(responseCode = "200", description = "OK",
+            content = @Content(schema = @Schema(implementation = UserResponseDto.class)))
+    @ApiResponse(responseCode = "404", description = "Not Found - usuario nao localizado",
             content = @Content(schema = @Schema(implementation = ErrorResponseDto.class)))
     @GetMapping("/{id}")
     public ResponseEntity<UserResponseDto> get(
@@ -109,7 +113,9 @@ public class UserRestController {
     }
 
     @Operation(summary = "Atualiza atributos de um usuario.")
-    @ApiResponse(responseCode = "200", description = "OK")
+    @ApiResponse(responseCode = "200", description = "OK", content = @Content)
+    @ApiResponse(responseCode = "404", description = "Not Found - usuario nao localizado",
+            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class)))
     @PutMapping("/{id}")
     public ResponseEntity<Void> update(
             @RequestHeader(value = "Authorization", required = false) String bearer,
@@ -120,7 +126,9 @@ public class UserRestController {
     }
 
     @Operation(summary = "Atualiza a senha de um usuario.")
-    @ApiResponse(responseCode = "200", description = "OK")
+    @ApiResponse(responseCode = "200", description = "OK", content = @Content)
+    @ApiResponse(responseCode = "404", description = "Not Found - usuario nao localizado",
+            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class)))
     @PatchMapping("/{id}")
     public ResponseEntity<Void> patchPassword(
             @RequestHeader(value = "Authorization", required = false) String bearer,
@@ -131,7 +139,9 @@ public class UserRestController {
     }
 
     @Operation(summary = "Exclusao logica: desabilita o usuario (enabled=false).")
-    @ApiResponse(responseCode = "204", description = "No Content")
+    @ApiResponse(responseCode = "204", description = "No Content", content = @Content)
+    @ApiResponse(responseCode = "404", description = "Not Found - usuario nao localizado",
+            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class)))
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> disable(
             @RequestHeader(value = "Authorization", required = false) String bearer,

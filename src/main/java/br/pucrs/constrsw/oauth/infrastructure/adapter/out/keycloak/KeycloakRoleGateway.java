@@ -1,5 +1,7 @@
 package br.pucrs.constrsw.oauth.infrastructure.adapter.out.keycloak;
 
+import static br.pucrs.constrsw.oauth.infrastructure.adapter.out.keycloak.KeycloakErrors.causedBy;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -26,6 +28,7 @@ import br.pucrs.constrsw.oauth.domain.exception.IdentityProviderUnavailableExcep
 import br.pucrs.constrsw.oauth.domain.exception.InvalidInputException;
 import br.pucrs.constrsw.oauth.domain.exception.RoleAlreadyExistsException;
 import br.pucrs.constrsw.oauth.domain.exception.RoleNotFoundException;
+import br.pucrs.constrsw.oauth.domain.exception.UpstreamErrorException;
 import br.pucrs.constrsw.oauth.domain.exception.UserNotFoundException;
 import br.pucrs.constrsw.oauth.domain.model.NewRole;
 import br.pucrs.constrsw.oauth.domain.model.Role;
@@ -79,8 +82,10 @@ public class KeycloakRoleGateway implements RoleGateway {
         // Object.class (nao List.class): em erro (401/403/...) o Keycloak devolve um
         // objeto JSON, nao um array - forcar List.class quebraria a deserializacao
         // antes mesmo de chegar ao translateError, virando 500 em vez do codigo certo.
-        ResponseEntity<Object> response = call(properties.rolesEndpoint(), HttpMethod.GET,
-                new HttpEntity<>(headers(bearer, null)), Object.class);
+        // briefRepresentation=false: sem isso o Keycloak omite "attributes" na listagem e
+        // todo role pareceria enabled=true (a exclusao logica vive em attributes.enabled).
+        ResponseEntity<Object> response = call(properties.rolesEndpoint() + "?briefRepresentation=false",
+                HttpMethod.GET, new HttpEntity<>(headers(bearer, null)), Object.class);
 
         HttpStatusCode status = response.getStatusCode();
         if (status.is2xxSuccessful()) {
@@ -102,42 +107,27 @@ public class KeycloakRoleGateway implements RoleGateway {
 
     @Override
     public Role findById(String bearer, String id) {
-        ResponseEntity<Map> response = call(properties.roleByIdEndpoint(id), HttpMethod.GET,
-                new HttpEntity<>(headers(bearer, null)));
-
-        HttpStatusCode status = response.getStatusCode();
-        if (status.is2xxSuccessful()) {
-            Map<String, Object> r = response.getBody();
-            if (r == null) throw new RoleNotFoundException(id);
-            return toRole(r);
-        }
-        translateError(status, response.getBody(), null, id);
-        throw new IdentityProviderUnavailableException("unreachable");
+        return toRole(findRawById(bearer, id));
     }
 
     @Override
     public void update(String bearer, String id, RoleUpdate update) {
-        // Busca o estado atual para poder fazer merge (PUT do Keycloak exige
-        // a representacao completa) e para preservar campos nao informados.
-        Role current = findById(bearer, id);
+        // Merge: campos nao informados mantem o valor atual.
+        Map<String, Object> current = findRawById(bearer, id);
+        Role currentRole = toRole(current);
+        write(bearer, id, current,
+                update.getName() != null ? update.getName() : currentRole.getName(),
+                update.getDescription() != null ? update.getDescription() : currentRole.getDescription(),
+                update.getEnabled() != null ? update.getEnabled() : currentRole.isEnabled());
+    }
 
-        Map<String, Object> body = new HashMap<>();
-        body.put("id", id);
-        body.put("name", update.getName() != null ? update.getName() : current.getName());
-        body.put("description",
-                update.getDescription() != null ? update.getDescription() : current.getDescription());
-
-        boolean enabled = update.getEnabled() != null ? update.getEnabled() : current.isEnabled();
-        Map<String, List<String>> attributes = new HashMap<>();
-        attributes.put("enabled", Collections.singletonList(String.valueOf(enabled)));
-        body.put("attributes", attributes);
-
-        ResponseEntity<Map> response = call(properties.roleByIdEndpoint(id), HttpMethod.PUT,
-                new HttpEntity<>(body, headers(bearer, MediaType.APPLICATION_JSON)));
-
-        HttpStatusCode status = response.getStatusCode();
-        if (status.is2xxSuccessful()) return;
-        translateError(status, response.getBody(), update.getName(), id);
+    @Override
+    public void replace(String bearer, String id, RoleUpdate replacement) {
+        // Substituicao: os campos do recurso vem todos da requisicao, inclusive
+        // description null (apaga a descricao).
+        Map<String, Object> current = findRawById(bearer, id);
+        write(bearer, id, current, replacement.getName(), replacement.getDescription(),
+                !Boolean.FALSE.equals(replacement.getEnabled()));
     }
 
     @Override
@@ -158,7 +148,8 @@ public class KeycloakRoleGateway implements RoleGateway {
         HttpStatusCode status = response.getStatusCode();
         if (status.is2xxSuccessful()) return;
         if (status.value() == HttpStatus.NOT_FOUND.value()) {
-            throw new UserNotFoundException(userId);
+            throw causedBy(new UserNotFoundException(userId),
+                    KeycloakErrors.upstream(status.value(), response.getBody()));
         }
         translateError(status, response.getBody(), role.getName(), roleId);
     }
@@ -177,12 +168,55 @@ public class KeycloakRoleGateway implements RoleGateway {
         HttpStatusCode status = response.getStatusCode();
         if (status.is2xxSuccessful()) return;
         if (status.value() == HttpStatus.NOT_FOUND.value()) {
-            throw new UserNotFoundException(userId);
+            throw causedBy(new UserNotFoundException(userId),
+                    KeycloakErrors.upstream(status.value(), response.getBody()));
         }
         translateError(status, response.getBody(), role.getName(), roleId);
     }
 
     // -------------------- helpers --------------------
+
+    /** Representacao completa do Keycloak (inclui attributes), ou 404 traduzido. */
+    private Map<String, Object> findRawById(String bearer, String id) {
+        ResponseEntity<Map> response = call(properties.roleByIdEndpoint(id), HttpMethod.GET,
+                new HttpEntity<>(headers(bearer, null)));
+
+        HttpStatusCode status = response.getStatusCode();
+        if (status.is2xxSuccessful()) {
+            Map<String, Object> r = response.getBody();
+            if (r == null) throw new RoleNotFoundException(id);
+            return r;
+        }
+        translateError(status, response.getBody(), null, id);
+        throw new IdentityProviderUnavailableException("unreachable");
+    }
+
+    /**
+     * PUT em roles-by-id. O Keycloak substitui o mapa "attributes" inteiro pelo
+     * enviado, entao os atributos customizados que ja existem na role sao
+     * copiados e so "enabled" e sobrescrito.
+     */
+    private void write(String bearer, String id, Map<String, Object> current,
+                       String name, String description, boolean enabled) {
+        Map<String, Object> attributes = new HashMap<>();
+        if (current.get("attributes") instanceof Map<?, ?> existing) {
+            existing.forEach((k, v) -> attributes.put(String.valueOf(k), v));
+        }
+        attributes.put("enabled", Collections.singletonList(String.valueOf(enabled)));
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("id", id);
+        body.put("name", name);
+        body.put("description", description);
+        body.put("attributes", attributes);
+
+        ResponseEntity<Map> response = call(properties.roleByIdEndpoint(id), HttpMethod.PUT,
+                new HttpEntity<>(body, headers(bearer, MediaType.APPLICATION_JSON)));
+
+        HttpStatusCode status = response.getStatusCode();
+        if (status.is2xxSuccessful()) return;
+        translateError(status, response.getBody(), name, id);
+    }
 
     private Role findByName(String bearer, String name) {
         ResponseEntity<Map> response = call(properties.roleByNameEndpoint(name), HttpMethod.GET,
@@ -249,14 +283,18 @@ public class KeycloakRoleGateway implements RoleGateway {
     private void translateError(HttpStatusCode status, Object body, String name, String id) {
         int code = status.value();
         String description = extractErrorMessage(body);
-        if (code == 400) throw new InvalidInputException(description);
-        if (code == 401) throw new AuthorizationRequiredException("Invalid or expired access token");
-        if (code == 403) throw new AccessDeniedException(
-                "Access token does not grant permission for this operation");
-        if (code == 404) throw new RoleNotFoundException(id != null ? id : (name != null ? name : ""));
-        if (code == 409) throw new RoleAlreadyExistsException(name != null ? name : "");
+        UpstreamErrorException upstream = KeycloakErrors.upstream(code, body);
+        if (code == 400) throw causedBy(new InvalidInputException(
+                description.isEmpty() ? "Invalid request for Keycloak" : description), upstream);
+        if (code == 401) throw causedBy(new AuthorizationRequiredException(
+                "Invalid or expired access token"), upstream);
+        if (code == 403) throw causedBy(new AccessDeniedException(
+                "Access token does not grant permission for this operation"), upstream);
+        if (code == 404) throw causedBy(new RoleNotFoundException(
+                id != null ? id : (name != null ? name : "")), upstream);
+        if (code == 409) throw causedBy(new RoleAlreadyExistsException(name != null ? name : ""), upstream);
         throw new IdentityProviderUnavailableException(
-                "Unexpected Keycloak response " + code + ": " + description);
+                "Unexpected Keycloak response " + code + ": " + description, upstream);
     }
 
     private String extractErrorMessage(Object body) {

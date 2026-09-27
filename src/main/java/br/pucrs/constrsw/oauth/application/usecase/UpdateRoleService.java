@@ -1,13 +1,10 @@
 package br.pucrs.constrsw.oauth.application.usecase;
 
-import org.springframework.stereotype.Service;
-
 import br.pucrs.constrsw.oauth.application.port.in.UpdateRoleUseCase;
 import br.pucrs.constrsw.oauth.application.port.out.RoleGateway;
 import br.pucrs.constrsw.oauth.domain.exception.InvalidInputException;
 import br.pucrs.constrsw.oauth.domain.model.RoleUpdate;
 
-@Service
 public class UpdateRoleService implements UpdateRoleUseCase {
 
     private final RoleGateway roleGateway;

@@ -1,18 +1,21 @@
 package br.pucrs.constrsw.oauth.infrastructure.adapter.in.rest.dto;
 
 import br.pucrs.constrsw.oauth.domain.model.RoleUpdate;
+import jakarta.validation.constraints.NotBlank;
 
 /**
- * Request body do PATCH /roles/{id} (atualizacao parcial). Todos os campos
- * sao opcionais; o que vier null nao e alterado no provider.
+ * Request body do PUT /roles/{id} (substituicao): representa o role inteiro.
+ * description ausente apaga a descricao; enabled ausente vale true.
  */
-public class RoleUpdateRequestDto {
+public class RoleReplaceRequestDto {
 
+    @NotBlank(message = "name is required")
     private String name;
+
     private String description;
     private Boolean enabled;
 
-    public RoleUpdateRequestDto() {}
+    public RoleReplaceRequestDto() {}
 
     public RoleUpdate toDomain() {
         return new RoleUpdate(name, description, enabled);

@@ -24,7 +24,9 @@ public class SecurityConfig {
             "/swagger-ui.html",
             "/swagger-ui/**",
             "/v3/api-docs/**",
-            "/actuator/health"
+            "/actuator/health",
+            // Coletado pelo Prometheus, que nao tem token do Keycloak
+            "/actuator/prometheus"
     };
 
     private final CustomAuthenticationEntryPoint authenticationEntryPoint;

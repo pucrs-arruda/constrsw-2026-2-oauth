@@ -22,13 +22,16 @@ import br.pucrs.constrsw.oauth.application.port.in.DeleteRoleUseCase;
 import br.pucrs.constrsw.oauth.application.port.in.DetachRoleFromUserUseCase;
 import br.pucrs.constrsw.oauth.application.port.in.GetRoleUseCase;
 import br.pucrs.constrsw.oauth.application.port.in.ListRolesUseCase;
+import br.pucrs.constrsw.oauth.application.port.in.ReplaceRoleUseCase;
 import br.pucrs.constrsw.oauth.application.port.in.UpdateRoleUseCase;
 import br.pucrs.constrsw.oauth.domain.model.Role;
 import br.pucrs.constrsw.oauth.infrastructure.adapter.in.rest.dto.ErrorResponseDto;
 import br.pucrs.constrsw.oauth.infrastructure.adapter.in.rest.dto.RoleCreateRequestDto;
+import br.pucrs.constrsw.oauth.infrastructure.adapter.in.rest.dto.RoleReplaceRequestDto;
 import br.pucrs.constrsw.oauth.infrastructure.adapter.in.rest.dto.RoleResponseDto;
 import br.pucrs.constrsw.oauth.infrastructure.adapter.in.rest.dto.RoleUpdateRequestDto;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -43,11 +46,19 @@ import jakarta.validation.Valid;
 @RestController
 @RequestMapping("/roles")
 @Tag(name = "Roles", description = "Gestao de roles e atribuicao a usuarios (proxy do Keycloak Admin API)")
+// Codigos comuns a todas as rotas; 404/409 ficam nos metodos em que se aplicam.
+@ApiResponse(responseCode = "400", description = "Bad Request - erro na estrutura da chamada",
+        content = @Content(schema = @Schema(implementation = ErrorResponseDto.class)))
+@ApiResponse(responseCode = "401", description = "Unauthorized - access token ausente ou invalido",
+        content = @Content(schema = @Schema(implementation = ErrorResponseDto.class)))
+@ApiResponse(responseCode = "403", description = "Forbidden - access token nao concede permissao",
+        content = @Content(schema = @Schema(implementation = ErrorResponseDto.class)))
 public class RoleRestController {
 
     private final CreateRoleUseCase createRole;
     private final ListRolesUseCase listRoles;
     private final GetRoleUseCase getRole;
+    private final ReplaceRoleUseCase replaceRole;
     private final UpdateRoleUseCase updateRole;
     private final DeleteRoleUseCase deleteRole;
     private final AttachRoleToUserUseCase attachRoleToUser;
@@ -56,6 +67,7 @@ public class RoleRestController {
     public RoleRestController(CreateRoleUseCase createRole,
                               ListRolesUseCase listRoles,
                               GetRoleUseCase getRole,
+                              ReplaceRoleUseCase replaceRole,
                               UpdateRoleUseCase updateRole,
                               DeleteRoleUseCase deleteRole,
                               AttachRoleToUserUseCase attachRoleToUser,
@@ -63,6 +75,7 @@ public class RoleRestController {
         this.createRole = createRole;
         this.listRoles = listRoles;
         this.getRole = getRole;
+        this.replaceRole = replaceRole;
         this.updateRole = updateRole;
         this.deleteRole = deleteRole;
         this.attachRoleToUser = attachRoleToUser;
@@ -72,13 +85,7 @@ public class RoleRestController {
     @Operation(summary = "Cria um novo role")
     @ApiResponse(responseCode = "201", description = "Created",
             content = @Content(schema = @Schema(implementation = RoleResponseDto.class)))
-    @ApiResponse(responseCode = "400", description = "Bad Request",
-            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class)))
-    @ApiResponse(responseCode = "401", description = "Unauthorized",
-            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class)))
-    @ApiResponse(responseCode = "403", description = "Forbidden",
-            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class)))
-    @ApiResponse(responseCode = "409", description = "Conflict",
+    @ApiResponse(responseCode = "409", description = "Conflict - role ja existente",
             content = @Content(schema = @Schema(implementation = ErrorResponseDto.class)))
     @PostMapping
     public ResponseEntity<RoleResponseDto> create(
@@ -89,7 +96,8 @@ public class RoleRestController {
     }
 
     @Operation(summary = "Lista todos os roles, opcionalmente filtrando por enabled.")
-    @ApiResponse(responseCode = "200", description = "OK")
+    @ApiResponse(responseCode = "200", description = "OK",
+            content = @Content(array = @ArraySchema(schema = @Schema(implementation = RoleResponseDto.class))))
     @GetMapping
     public ResponseEntity<List<RoleResponseDto>> list(
             @RequestHeader(value = "Authorization", required = false) String bearer,
@@ -101,8 +109,9 @@ public class RoleRestController {
     }
 
     @Operation(summary = "Recupera um role pelo id.")
-    @ApiResponse(responseCode = "200", description = "OK")
-    @ApiResponse(responseCode = "404", description = "Not Found",
+    @ApiResponse(responseCode = "200", description = "OK",
+            content = @Content(schema = @Schema(implementation = RoleResponseDto.class)))
+    @ApiResponse(responseCode = "404", description = "Not Found - role nao localizado",
             content = @Content(schema = @Schema(implementation = ErrorResponseDto.class)))
     @GetMapping("/{id}")
     public ResponseEntity<RoleResponseDto> get(
@@ -111,22 +120,28 @@ public class RoleRestController {
         return ResponseEntity.ok(RoleResponseDto.fromDomain(getRole.execute(bearer, id)));
     }
 
-    @Operation(summary = "Atualiza (total) um role.")
-    @ApiResponse(responseCode = "200", description = "OK")
-    @ApiResponse(responseCode = "404", description = "Not Found",
+    @Operation(summary = "Substitui um role inteiro.",
+            description = "name e obrigatorio; description ausente apaga a descricao e "
+                    + "enabled ausente vale true. Para alterar so alguns campos, use o PATCH.")
+    @ApiResponse(responseCode = "200", description = "OK", content = @Content)
+    @ApiResponse(responseCode = "404", description = "Not Found - role nao localizado",
+            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class)))
+    @ApiResponse(responseCode = "409", description = "Conflict - ja existe role com esse nome",
             content = @Content(schema = @Schema(implementation = ErrorResponseDto.class)))
     @PutMapping("/{id}")
-    public ResponseEntity<Void> update(
+    public ResponseEntity<Void> replace(
             @RequestHeader(value = "Authorization", required = false) String bearer,
             @PathVariable("id") String id,
-            @RequestBody RoleUpdateRequestDto request) {
-        updateRole.execute(bearer, id, request.toDomain());
+            @Valid @RequestBody RoleReplaceRequestDto request) {
+        replaceRole.execute(bearer, id, request.toDomain());
         return ResponseEntity.ok().build();
     }
 
-    @Operation(summary = "Atualiza parcialmente um role.")
-    @ApiResponse(responseCode = "200", description = "OK")
-    @ApiResponse(responseCode = "404", description = "Not Found",
+    @Operation(summary = "Atualiza parcialmente um role (so os campos enviados).")
+    @ApiResponse(responseCode = "200", description = "OK", content = @Content)
+    @ApiResponse(responseCode = "404", description = "Not Found - role nao localizado",
+            content = @Content(schema = @Schema(implementation = ErrorResponseDto.class)))
+    @ApiResponse(responseCode = "409", description = "Conflict - ja existe role com esse nome",
             content = @Content(schema = @Schema(implementation = ErrorResponseDto.class)))
     @PatchMapping("/{id}")
     public ResponseEntity<Void> patch(
@@ -138,8 +153,8 @@ public class RoleRestController {
     }
 
     @Operation(summary = "Exclusao logica: desabilita o role (enabled=false).")
-    @ApiResponse(responseCode = "204", description = "No Content")
-    @ApiResponse(responseCode = "404", description = "Not Found",
+    @ApiResponse(responseCode = "204", description = "No Content", content = @Content)
+    @ApiResponse(responseCode = "404", description = "Not Found - role nao localizado",
             content = @Content(schema = @Schema(implementation = ErrorResponseDto.class)))
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(
@@ -150,8 +165,8 @@ public class RoleRestController {
     }
 
     @Operation(summary = "Atribui um role a um usuario.")
-    @ApiResponse(responseCode = "204", description = "No Content")
-    @ApiResponse(responseCode = "404", description = "Not Found (role ou usuario)",
+    @ApiResponse(responseCode = "204", description = "No Content", content = @Content)
+    @ApiResponse(responseCode = "404", description = "Not Found - role ou usuario nao localizado",
             content = @Content(schema = @Schema(implementation = ErrorResponseDto.class)))
     @PostMapping("/{roleId}/users/{userId}")
     public ResponseEntity<Void> attachToUser(
@@ -163,8 +178,8 @@ public class RoleRestController {
     }
 
     @Operation(summary = "Remove a atribuicao de um role a um usuario.")
-    @ApiResponse(responseCode = "204", description = "No Content")
-    @ApiResponse(responseCode = "404", description = "Not Found (role ou usuario)",
+    @ApiResponse(responseCode = "204", description = "No Content", content = @Content)
+    @ApiResponse(responseCode = "404", description = "Not Found - role ou usuario nao localizado",
             content = @Content(schema = @Schema(implementation = ErrorResponseDto.class)))
     @DeleteMapping("/{roleId}/users/{userId}")
     public ResponseEntity<Void> detachFromUser(

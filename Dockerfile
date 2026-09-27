@@ -18,5 +18,6 @@ RUN apk add --no-cache curl
 
 COPY --from=build /app/target/oauth.jar app.jar
 
-EXPOSE 3001
+# 3001 = API, 9464 = actuator (health + /actuator/prometheus)
+EXPOSE 3001 9464
 ENTRYPOINT ["java", "-jar", "app.jar"]

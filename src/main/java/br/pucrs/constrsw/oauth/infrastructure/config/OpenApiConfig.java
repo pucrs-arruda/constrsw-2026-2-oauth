@@ -19,8 +19,9 @@ public class OpenApiConfig {
                 .info(new Info()
                         .title("ConstrSW - OAuth API")
                         .description("API REST em Clean Architecture que encapsula o Keycloak "
-                                + "para autenticacao (POST /login) e gestao de usuarios "
-                                + "(CRUD em /users). Grupo 04 - students.")
+                                + "para autenticacao (POST /login), gestao de usuarios "
+                                + "(CRUD em /users) e de roles (CRUD em /roles e atribuicao "
+                                + "a usuarios). Grupo 04 - students.")
                         .version("v1"))
                 .addSecurityItem(new SecurityRequirement().addList(bearerScheme))
                 .components(new Components()

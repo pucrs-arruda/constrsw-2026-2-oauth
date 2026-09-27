@@ -1,14 +1,11 @@
 package br.pucrs.constrsw.oauth.application.usecase;
 
-import org.springframework.stereotype.Service;
-
 import br.pucrs.constrsw.oauth.application.port.in.LoginUseCase;
 import br.pucrs.constrsw.oauth.application.port.out.AuthGateway;
 import br.pucrs.constrsw.oauth.domain.exception.InvalidInputException;
 import br.pucrs.constrsw.oauth.domain.model.AuthTokens;
 import br.pucrs.constrsw.oauth.domain.model.Credentials;
 
-@Service
 public class LoginService implements LoginUseCase {
 
     private final AuthGateway authGateway;

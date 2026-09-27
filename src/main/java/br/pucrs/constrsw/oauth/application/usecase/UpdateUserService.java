@@ -1,7 +1,5 @@
 package br.pucrs.constrsw.oauth.application.usecase;
 
-import org.springframework.stereotype.Service;
-
 import br.pucrs.constrsw.oauth.application.port.in.UpdateUserUseCase;
 import br.pucrs.constrsw.oauth.application.port.out.UserGateway;
 import br.pucrs.constrsw.oauth.domain.exception.InvalidEmailException;
@@ -9,7 +7,6 @@ import br.pucrs.constrsw.oauth.domain.exception.InvalidInputException;
 import br.pucrs.constrsw.oauth.domain.model.UserUpdate;
 import br.pucrs.constrsw.oauth.domain.util.EmailValidator;
 
-@Service
 public class UpdateUserService implements UpdateUserUseCase {
 
     private final UserGateway userGateway;

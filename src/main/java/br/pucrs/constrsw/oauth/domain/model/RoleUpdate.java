@@ -1,8 +1,9 @@
 package br.pucrs.constrsw.oauth.domain.model;
 
 /**
- * Value object: campos opcionais para atualizacao (total via PUT ou parcial
- * via PATCH) de um role. Campos null nao devem ser propagados ao provider.
+ * Value object: novos valores de um role. No PATCH (atualizacao parcial),
+ * campos null nao sao alterados; no PUT (substituicao), representa o role
+ * inteiro.
  */
 public final class RoleUpdate {
 

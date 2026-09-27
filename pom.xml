@@ -59,11 +59,7 @@
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
             <version>2.6.0</version>
         </dependency>
-        <!--
-          Necessario apenas para manter compilando o codigo legado preservado
-          em com.constrsw.oauth.config.RestTemplateConfig (fora do component-scan
-          padrao). Nao afeta a app ativa em br.pucrs.constrsw.oauth.
-        -->
+        <!-- Cliente HTTP do RestTemplate (HttpClientConfig) usado pelos gateways do Keycloak -->
         <dependency>
             <groupId>org.apache.httpcomponents.client5</groupId>
             <artifactId>httpclient5</artifactId>
@@ -87,6 +83,32 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
+            <!-- `mvn test` roda so os testes isolados; o fim a fim (tag e2e) fica no perfil e2e -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <excludedGroups>e2e</excludedGroups>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!-- Teste fim a fim contra a stack no ar (docker compose up): mvn test -Pe2e -->
+        <profile>
+            <id>e2e</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration combine.self="override">
+                            <groups>e2e</groups>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

@@ -22,8 +22,15 @@ public interface RoleGateway {
 
     Role findById(String bearer, String id);
 
-    /** Atualizacao total ou parcial: campos null em {@code update} nao sao alterados. */
+    /** Atualizacao parcial (PATCH): campos null em {@code update} nao sao alterados. */
     void update(String bearer, String id, RoleUpdate update);
+
+    /**
+     * Substituicao (PUT): name, description e enabled passam a ser exatamente os
+     * informados (description null apaga a descricao). Atributos do provider que
+     * a API nao expoe sao preservados.
+     */
+    void replace(String bearer, String id, RoleUpdate replacement);
 
     /** Exclusao logica: enabled=false (via atributo customizado) no provider. */
     void delete(String bearer, String id);

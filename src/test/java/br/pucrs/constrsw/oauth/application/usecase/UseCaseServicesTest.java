@@ -119,6 +119,27 @@ class UseCaseServicesTest {
   }
 
   @Test
+  void replaceRoleSendsWholeRoleDefaultingEnabledToTrue() {
+    new ReplaceRoleService(roleGateway).execute("token", "r1", new RoleUpdate("teacher", null, null));
+
+    org.mockito.ArgumentCaptor<RoleUpdate> sent = org.mockito.ArgumentCaptor.forClass(RoleUpdate.class);
+    verify(roleGateway).replace(org.mockito.ArgumentMatchers.eq("token"), org.mockito.ArgumentMatchers.eq("r1"),
+        sent.capture());
+    assertEquals("teacher", sent.getValue().getName());
+    assertEquals(null, sent.getValue().getDescription());
+    assertEquals(Boolean.TRUE, sent.getValue().getEnabled());
+  }
+
+  @Test
+  void replaceRoleRequiresName() {
+    assertThrows(InvalidInputException.class,
+        () -> new ReplaceRoleService(roleGateway).execute("token", "r1", new RoleUpdate(null, "d", true)));
+    assertThrows(InvalidInputException.class,
+        () -> new ReplaceRoleService(roleGateway).execute("token", "r1", new RoleUpdate(" ", "d", true)));
+    verifyNoInteractions(roleGateway);
+  }
+
+  @Test
   void rejectsInvalidRoleInputBeforeGatewayCall() {
     assertThrows(InvalidInputException.class,
         () -> new CreateRoleService(roleGateway).execute("token", new NewRole(" ", "description")));

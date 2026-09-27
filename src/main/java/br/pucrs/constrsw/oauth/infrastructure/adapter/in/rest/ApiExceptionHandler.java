@@ -1,6 +1,10 @@
 package br.pucrs.constrsw.oauth.infrastructure.adapter.in.rest;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,6 +19,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import br.pucrs.constrsw.oauth.domain.exception.AccessDeniedException;
 import br.pucrs.constrsw.oauth.domain.exception.AuthorizationRequiredException;
@@ -24,6 +29,7 @@ import br.pucrs.constrsw.oauth.domain.exception.InvalidEmailException;
 import br.pucrs.constrsw.oauth.domain.exception.InvalidInputException;
 import br.pucrs.constrsw.oauth.domain.exception.RoleAlreadyExistsException;
 import br.pucrs.constrsw.oauth.domain.exception.RoleNotFoundException;
+import br.pucrs.constrsw.oauth.domain.exception.UpstreamErrorException;
 import br.pucrs.constrsw.oauth.domain.exception.UserAlreadyExistsException;
 import br.pucrs.constrsw.oauth.domain.exception.UserNotFoundException;
 import br.pucrs.constrsw.oauth.infrastructure.adapter.in.rest.dto.ErrorResponseDto;
@@ -34,15 +40,16 @@ import br.pucrs.constrsw.oauth.infrastructure.adapter.in.rest.dto.ErrorStackEntr
  * status code + envelope padronizado do enunciado (error_code /
  * error_description / error_source / error_stack).
  *
- * O source padrao e "OAuthAPI". Quando a excecao veio do provedor externo,
- * o adapter (KeycloakAuthGateway/KeycloakUserGateway) inclui isso na origem
- * lancando uma excecao de dominio com mensagem descritiva.
+ * O error_source e sempre "OAuthAPI" (origem do erro final). Quando o erro
+ * nasceu no Keycloak, os gateways anexam um {@link UpstreamErrorException}
+ * como causa, e ele aparece como primeiro item do error_stack.
  */
 @RestControllerAdvice
 public class ApiExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
     private static final String SOURCE = "OAuthAPI";
+    private static final int MAX_STACK_DEPTH = 10;
 
     // -------------------------- Domain exceptions --------------------------
 
@@ -124,6 +131,11 @@ public class ApiExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, ex);
     }
 
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ErrorResponseDto> handleNoRoute(NoResourceFoundException ex) {
+        return build(HttpStatus.NOT_FOUND, ex);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponseDto> handleAny(Exception ex) {
         log.error("Unhandled exception", ex);
@@ -136,9 +148,25 @@ public class ApiExceptionHandler {
         String description = cause.getMessage() != null
                 ? cause.getMessage()
                 : status.getReasonPhrase();
-        List<ErrorStackEntryDto> stack = List.of(
-                new ErrorStackEntryDto(cause.getClass().getSimpleName(), description));
-        return buildWithStack(status, description, stack);
+        return buildWithStack(status, description, stackOf(cause));
+    }
+
+    /**
+     * Pilha de todos os erros ate o erro final: percorre a cadeia de causas e a
+     * devolve na ordem em que os erros aconteceram (origem primeiro, erro final
+     * da OAuthAPI por ultimo). Erros vindos do Keycloak chegam como
+     * {@link UpstreamErrorException} e mantem o source e a mensagem originais.
+     */
+    private List<ErrorStackEntryDto> stackOf(Throwable error) {
+        List<ErrorStackEntryDto> stack = new ArrayList<>();
+        Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (Throwable t = error; t != null && stack.size() < MAX_STACK_DEPTH && seen.add(t); t = t.getCause()) {
+            String message = t.getMessage() != null ? t.getMessage() : t.getClass().getSimpleName();
+            String source = t instanceof UpstreamErrorException upstream ? upstream.getSource() : SOURCE;
+            stack.add(new ErrorStackEntryDto(source, t.getClass().getSimpleName(), message));
+        }
+        Collections.reverse(stack);
+        return stack;
     }
 
     private ResponseEntity<ErrorResponseDto> buildWithStack(HttpStatus status, String description,

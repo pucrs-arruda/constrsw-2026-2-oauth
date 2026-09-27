@@ -1,11 +1,8 @@
 package br.pucrs.constrsw.oauth.application.usecase;
 
-import org.springframework.stereotype.Service;
-
 import br.pucrs.constrsw.oauth.application.port.in.DeleteRoleUseCase;
 import br.pucrs.constrsw.oauth.application.port.out.RoleGateway;
 
-@Service
 public class DeleteRoleService implements DeleteRoleUseCase {
 
     private final RoleGateway roleGateway;

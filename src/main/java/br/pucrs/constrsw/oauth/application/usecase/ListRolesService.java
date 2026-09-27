@@ -2,13 +2,10 @@ package br.pucrs.constrsw.oauth.application.usecase;
 
 import java.util.List;
 
-import org.springframework.stereotype.Service;
-
 import br.pucrs.constrsw.oauth.application.port.in.ListRolesUseCase;
 import br.pucrs.constrsw.oauth.application.port.out.RoleGateway;
 import br.pucrs.constrsw.oauth.domain.model.Role;
 
-@Service
 public class ListRolesService implements ListRolesUseCase {
 
     private final RoleGateway roleGateway;

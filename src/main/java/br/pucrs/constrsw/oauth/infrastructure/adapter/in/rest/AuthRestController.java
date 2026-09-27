@@ -42,7 +42,10 @@ public class AuthRestController {
             content = @Content(schema = @Schema(implementation = ErrorResponseDto.class)))
     @ApiResponse(responseCode = "401", description = "Unauthorized",
             content = @Content(schema = @Schema(implementation = ErrorResponseDto.class)))
-    @PostMapping(path = "/login", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    // form-data (multipart) e o formato do enunciado; x-www-form-urlencoded tambem e
+    // aceito porque e a outra opcao de formulario do Postman.
+    @PostMapping(path = "/login",
+            consumes = {MediaType.MULTIPART_FORM_DATA_VALUE, MediaType.APPLICATION_FORM_URLENCODED_VALUE})
     public ResponseEntity<LoginResponseDto> login(@RequestParam("username") String username,
                                                    @RequestParam("password") String password) {
         AuthTokens tokens = loginUseCase.execute(new Credentials(username, password));

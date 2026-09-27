@@ -24,12 +24,14 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestTemplate;
 
+import br.pucrs.constrsw.oauth.domain.exception.UpstreamErrorException;
 import br.pucrs.constrsw.oauth.domain.exception.UserAlreadyExistsException;
 import br.pucrs.constrsw.oauth.domain.model.AuthTokens;
 import br.pucrs.constrsw.oauth.domain.model.Credentials;
 import br.pucrs.constrsw.oauth.domain.model.NewRole;
 import br.pucrs.constrsw.oauth.domain.model.NewUser;
 import br.pucrs.constrsw.oauth.domain.model.Role;
+import br.pucrs.constrsw.oauth.domain.model.RoleUpdate;
 import br.pucrs.constrsw.oauth.domain.model.User;
 import br.pucrs.constrsw.oauth.infrastructure.config.KeycloakProperties;
 
@@ -112,8 +114,15 @@ class KeycloakGatewayContractTest {
             .contentType(MediaType.APPLICATION_JSON)
             .body("{\"errorMessage\":\"User exists\"}"));
 
-    assertThrows(UserAlreadyExistsException.class, () -> new KeycloakUserGateway(restTemplate, properties)
-        .create("access", new NewUser("ana@example.com", "secret", "Ana", "Silva")));
+    UserAlreadyExistsException ex = assertThrows(UserAlreadyExistsException.class,
+        () -> new KeycloakUserGateway(restTemplate, properties)
+            .create("access", new NewUser("ana@example.com", "secret", "Ana", "Silva")));
+
+    // O erro original do Keycloak fica preservado como causa (vira item do error_stack)
+    UpstreamErrorException upstream = (UpstreamErrorException) ex.getCause();
+    assertEquals("Keycloak", upstream.getSource());
+    assertEquals(409, upstream.getStatus());
+    assertEquals("HTTP 409 - User exists", upstream.getMessage());
     server.verify();
   }
 
@@ -143,20 +152,71 @@ class KeycloakGatewayContractTest {
   }
 
   @Test
-  void deletesRoleLogicallyThroughRolesByIdEndpoint() {
-    server.expect(requestTo("http://keycloak:8080/admin/realms/constrsw/roles-by-id/r1"))
+  void listsRolesWithFullRepresentationToFilterByEnabled() {
+    server.expect(requestTo("http://keycloak:8080/admin/realms/constrsw/roles?briefRepresentation=false"))
         .andExpect(method(HttpMethod.GET))
         .andRespond(withSuccess(
-            "{\"id\":\"r1\",\"name\":\"teacher\",\"description\":\"Teaching\",\"attributes\":{\"enabled\":[\"true\"]}}",
+            "[{\"id\":\"r1\",\"name\":\"ativo\",\"attributes\":{\"enabled\":[\"true\"]}},"
+                + "{\"id\":\"r2\",\"name\":\"excluido\",\"attributes\":{\"enabled\":[\"false\"]}}]",
             MediaType.APPLICATION_JSON));
+
+    java.util.List<Role> disabled = new KeycloakRoleGateway(restTemplate, properties)
+        .list("Bearer access", false);
+
+    assertEquals(1, disabled.size());
+    assertEquals("r2", disabled.get(0).getId());
+    server.verify();
+  }
+
+  private static final String ROLE_WITH_CUSTOM_ATTRIBUTE =
+      "{\"id\":\"r1\",\"name\":\"teacher\",\"description\":\"Teaching\","
+          + "\"attributes\":{\"enabled\":[\"true\"],\"origem\":[\"sistema-x\"]}}";
+
+  @Test
+  void deletesRoleLogicallyKeepingCustomAttributes() {
+    server.expect(requestTo("http://keycloak:8080/admin/realms/constrsw/roles-by-id/r1"))
+        .andExpect(method(HttpMethod.GET))
+        .andRespond(withSuccess(ROLE_WITH_CUSTOM_ATTRIBUTE, MediaType.APPLICATION_JSON));
     server.expect(requestTo("http://keycloak:8080/admin/realms/constrsw/roles-by-id/r1"))
         .andExpect(method(HttpMethod.PUT))
         .andExpect(header(AUTHORIZATION, "Bearer access"))
-        .andExpect(
-            content().json("{\"id\":\"r1\",\"name\":\"teacher\",\"attributes\":{\"enabled\":[\"false\"]}}", false))
+        .andExpect(content().json("{\"id\":\"r1\",\"name\":\"teacher\",\"description\":\"Teaching\","
+            + "\"attributes\":{\"enabled\":[\"false\"],\"origem\":[\"sistema-x\"]}}", true))
         .andRespond(withNoContent());
 
     new KeycloakRoleGateway(restTemplate, properties).delete("Bearer access", "r1");
+    server.verify();
+  }
+
+  @Test
+  void patchRoleMergesOnlyInformedFields() {
+    server.expect(requestTo("http://keycloak:8080/admin/realms/constrsw/roles-by-id/r1"))
+        .andExpect(method(HttpMethod.GET))
+        .andRespond(withSuccess(ROLE_WITH_CUSTOM_ATTRIBUTE, MediaType.APPLICATION_JSON));
+    server.expect(requestTo("http://keycloak:8080/admin/realms/constrsw/roles-by-id/r1"))
+        .andExpect(method(HttpMethod.PUT))
+        .andExpect(content().json("{\"id\":\"r1\",\"name\":\"teacher\",\"description\":\"Nova\","
+            + "\"attributes\":{\"enabled\":[\"true\"],\"origem\":[\"sistema-x\"]}}", true))
+        .andRespond(withNoContent());
+
+    new KeycloakRoleGateway(restTemplate, properties)
+        .update("Bearer access", "r1", new RoleUpdate(null, "Nova", null));
+    server.verify();
+  }
+
+  @Test
+  void putRoleReplacesFieldsButKeepsCustomAttributes() {
+    server.expect(requestTo("http://keycloak:8080/admin/realms/constrsw/roles-by-id/r1"))
+        .andExpect(method(HttpMethod.GET))
+        .andRespond(withSuccess(ROLE_WITH_CUSTOM_ATTRIBUTE, MediaType.APPLICATION_JSON));
+    server.expect(requestTo("http://keycloak:8080/admin/realms/constrsw/roles-by-id/r1"))
+        .andExpect(method(HttpMethod.PUT))
+        .andExpect(content().json("{\"id\":\"r1\",\"name\":\"professor\",\"description\":null,"
+            + "\"attributes\":{\"enabled\":[\"true\"],\"origem\":[\"sistema-x\"]}}", true))
+        .andRespond(withNoContent());
+
+    new KeycloakRoleGateway(restTemplate, properties)
+        .replace("Bearer access", "r1", new RoleUpdate("professor", null, true));
     server.verify();
   }
 
