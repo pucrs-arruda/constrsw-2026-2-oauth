@@ -4,6 +4,7 @@ import com.seugrupo.oauth.dto.CreateRoleRequest;
 import com.seugrupo.oauth.dto.PatchRoleRequest;
 import com.seugrupo.oauth.dto.RoleResponse;
 import com.seugrupo.oauth.dto.UpdateRoleRequest;
+import com.seugrupo.oauth.metrics.BusinessMetrics;
 import com.seugrupo.oauth.service.KeycloakRoleService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
@@ -28,9 +29,11 @@ import java.util.List;
 public class RoleController {
 
     private final KeycloakRoleService roleService;
+    private final BusinessMetrics metrics;
 
-    public RoleController(KeycloakRoleService roleService) {
+    public RoleController(KeycloakRoleService roleService, BusinessMetrics metrics) {
         this.roleService = roleService;
+        this.metrics = metrics;
     }
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
@@ -38,8 +41,9 @@ public class RoleController {
             @RequestHeader(HttpHeaders.AUTHORIZATION) String authorization,
             @Valid @RequestBody CreateRoleRequest request
     ) {
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(roleService.create(authorization, request));
+        RoleResponse created = roleService.create(authorization, request);
+        metrics.recordManagementOperation("role_created");
+        return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
     @GetMapping
@@ -62,6 +66,7 @@ public class RoleController {
             @Valid @RequestBody UpdateRoleRequest request
     ) {
         roleService.update(authorization, id, request);
+        metrics.recordManagementOperation("role_updated");
         return ResponseEntity.ok().build();
     }
 
@@ -72,6 +77,7 @@ public class RoleController {
             @Valid @RequestBody PatchRoleRequest request
     ) {
         roleService.patch(authorization, id, request);
+        metrics.recordManagementOperation("role_patched");
         return ResponseEntity.ok().build();
     }
 
@@ -81,6 +87,7 @@ public class RoleController {
             @PathVariable String id
     ) {
         roleService.delete(authorization, id);
+        metrics.recordManagementOperation("role_deleted");
         return ResponseEntity.noContent().build();
     }
 }

@@ -1,5 +1,6 @@
 package com.seugrupo.oauth.controller;
 
+import com.seugrupo.oauth.metrics.BusinessMetrics;
 import com.seugrupo.oauth.service.KeycloakRoleService;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -16,9 +17,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class UserRoleController {
 
     private final KeycloakRoleService roleService;
+    private final BusinessMetrics metrics;
 
-    public UserRoleController(KeycloakRoleService roleService) {
+    public UserRoleController(KeycloakRoleService roleService, BusinessMetrics metrics) {
         this.roleService = roleService;
+        this.metrics = metrics;
     }
 
     @PostMapping("/{userId}/roles/{roleId}")
@@ -28,6 +31,7 @@ public class UserRoleController {
             @PathVariable String roleId
     ) {
         roleService.assignToUser(authorization, userId, roleId);
+        metrics.recordManagementOperation("role_assigned");
         return ResponseEntity.noContent().build();
     }
 
@@ -38,6 +42,7 @@ public class UserRoleController {
             @PathVariable String roleId
     ) {
         roleService.unassignFromUser(authorization, userId, roleId);
+        metrics.recordManagementOperation("role_unassigned");
         return ResponseEntity.noContent().build();
     }
 }

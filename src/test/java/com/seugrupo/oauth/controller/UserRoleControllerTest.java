@@ -2,7 +2,9 @@ package com.seugrupo.oauth.controller;
 
 import com.seugrupo.oauth.exception.GlobalExceptionHandler;
 import com.seugrupo.oauth.exception.OAuthApiException;
+import com.seugrupo.oauth.metrics.BusinessMetrics;
 import com.seugrupo.oauth.service.KeycloakRoleService;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
@@ -27,7 +29,7 @@ class UserRoleControllerTest {
     void setUp() {
         roleService = mock(KeycloakRoleService.class);
         mockMvc = org.springframework.test.web.servlet.setup.MockMvcBuilders
-                .standaloneSetup(new UserRoleController(roleService))
+                .standaloneSetup(new UserRoleController(roleService, new BusinessMetrics(new SimpleMeterRegistry())))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }

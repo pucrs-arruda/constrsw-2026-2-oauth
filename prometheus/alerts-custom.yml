@@ -1,0 +1,26 @@
+groups:
+  - name: oauth_grupo08_alerts
+    rules:
+      # Usa a recording rule oauth:login_failure_ratio:rate5m (ver
+      # recording_rules.yml). Dispara se mais de 50% das tentativas de
+      # login nos ultimos 5 min falharem por pelo menos 2 minutos -
+      # indicativo de forca bruta ou de uma integracao quebrada.
+      - alert: HighLoginFailureRatio
+        expr: oauth:login_failure_ratio:rate5m > 0.5
+        for: 2m
+        labels:
+          severity: warning
+          service: oauth
+        annotations:
+          summary: "Taxa alta de falhas de login no oauth"
+          description: "Mais de 50% das tentativas de login falharam nos ultimos 5 minutos - possivel forca bruta."
+
+      - alert: OAuthErrorRatioHigh
+        expr: oauth:http_error_ratio:rate5m > 0.1
+        for: 2m
+        labels:
+          severity: critical
+          service: oauth
+        annotations:
+          summary: "Taxa de erro 5xx alta no oauth"
+          description: "Mais de 10% das requisicoes ao oauth estao retornando 5xx nos ultimos 5 minutos."

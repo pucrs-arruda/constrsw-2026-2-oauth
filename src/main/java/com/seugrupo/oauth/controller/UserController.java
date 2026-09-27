@@ -4,6 +4,7 @@ import com.seugrupo.oauth.dto.CreateUserRequest;
 import com.seugrupo.oauth.dto.UpdatePasswordRequest;
 import com.seugrupo.oauth.dto.UpdateUserRequest;
 import com.seugrupo.oauth.dto.UserResponse;
+import com.seugrupo.oauth.metrics.BusinessMetrics;
 import com.seugrupo.oauth.service.KeycloakUserService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
@@ -29,9 +30,11 @@ import java.util.List;
 public class UserController {
 
     private final KeycloakUserService userService;
+    private final BusinessMetrics metrics;
 
-    public UserController(KeycloakUserService userService) {
+    public UserController(KeycloakUserService userService, BusinessMetrics metrics) {
         this.userService = userService;
+        this.metrics = metrics;
     }
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
@@ -39,8 +42,9 @@ public class UserController {
             @RequestHeader(HttpHeaders.AUTHORIZATION) String authorization,
             @Valid @RequestBody CreateUserRequest request
     ) {
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(userService.create(authorization, request));
+        UserResponse created = userService.create(authorization, request);
+        metrics.recordManagementOperation("user_created");
+        return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
     @GetMapping
@@ -66,6 +70,7 @@ public class UserController {
             @Valid @RequestBody UpdateUserRequest request
     ) {
         userService.update(authorization, id, request);
+        metrics.recordManagementOperation("user_updated");
         return ResponseEntity.ok().build();
     }
 
@@ -76,6 +81,7 @@ public class UserController {
             @Valid @RequestBody UpdatePasswordRequest request
     ) {
         userService.updatePassword(authorization, id, request);
+        metrics.recordManagementOperation("user_password_reset");
         return ResponseEntity.ok().build();
     }
 
@@ -85,6 +91,7 @@ public class UserController {
             @PathVariable String id
     ) {
         userService.disable(authorization, id);
+        metrics.recordManagementOperation("user_disabled");
         return ResponseEntity.noContent().build();
     }
 }

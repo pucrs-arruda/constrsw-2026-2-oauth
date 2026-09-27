@@ -21,12 +21,54 @@ services:
       - '--web.enable-lifecycle'
     volumes:
       - ./backend/oauth/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./backend/oauth/prometheus/alerts-custom.yml:/etc/prometheus/alerts-custom.yml
+      - ./backend/oauth/prometheus/recording_rules.yml:/etc/prometheus/recording_rules.yml
       - prometheus-data:/prometheus
     ports:
       - "9090:9090"
     networks:
       - constrsw
+    depends_on:
+      - alertmanager
+    restart: always
+
+  # Alertmanager - roteamento, agrupamento e silenciamento dos alertas
+  # disparados pelo Prometheus (ver alerts.yml e alerts-custom.yml)
+  alertmanager:
+    container_name: alertmanager
+    image: prom/alertmanager:v0.27.0
+    volumes:
+      - ./backend/oauth/prometheus/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+      - alertmanager-data:/alertmanager
+    ports:
+      - "9093:9093"
+    networks:
+      - constrsw
+    restart: always
+
+  # Grafana - dashboards sobre as metricas coletadas pelo Prometheus
+  grafana:
+    container_name: grafana
+    image: grafana/grafana:11.2.0
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+    volumes:
+      - ./backend/oauth/grafana/provisioning:/etc/grafana/provisioning
+      - ./backend/oauth/grafana/dashboards:/var/lib/grafana/dashboards
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3300:3000"
+    networks:
+      - constrsw
+    depends_on:
+      - prometheus
     restart: always
 
 volumes:
   prometheus-data:
+  grafana-data:
+  alertmanager-data:

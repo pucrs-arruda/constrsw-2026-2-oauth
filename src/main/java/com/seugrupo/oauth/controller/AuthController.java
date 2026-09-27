@@ -3,6 +3,7 @@ package com.seugrupo.oauth.controller;
 import com.seugrupo.oauth.dto.LoginRequest;
 import com.seugrupo.oauth.dto.RefreshTokenRequest;
 import com.seugrupo.oauth.dto.TokenResponse;
+import com.seugrupo.oauth.metrics.BusinessMetrics;
 import com.seugrupo.oauth.service.KeycloakAuthService;
 import jakarta.validation.Valid;
 import org.springframework.http.CacheControl;
@@ -19,9 +20,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final KeycloakAuthService authService;
+    private final BusinessMetrics metrics;
 
-    public AuthController(KeycloakAuthService authService) {
+    public AuthController(KeycloakAuthService authService, BusinessMetrics metrics) {
         this.authService = authService;
+        this.metrics = metrics;
     }
 
     @PostMapping(
@@ -32,9 +35,16 @@ public class AuthController {
             }
     )
     public ResponseEntity<TokenResponse> login(@Valid @ModelAttribute LoginRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .cacheControl(CacheControl.noStore())
-                .body(authService.login(request));
+        try {
+            TokenResponse tokens = authService.login(request);
+            metrics.recordLoginSuccess();
+            return ResponseEntity.status(HttpStatus.CREATED)
+                    .cacheControl(CacheControl.noStore())
+                    .body(tokens);
+        } catch (RuntimeException ex) {
+            metrics.recordLoginFailure();
+            throw ex;
+        }
     }
 
     @PostMapping(path = "/refresh-token", consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE)

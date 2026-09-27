@@ -1,6 +1,7 @@
 package com.seugrupo.oauth.config;
 
 import com.seugrupo.oauth.controller.UserController;
+import com.seugrupo.oauth.metrics.BusinessMetrics;
 import com.seugrupo.oauth.service.KeycloakUserService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,6 +44,9 @@ class SecurityFilterChainIntegrationTest {
 
     @MockBean
     private JwtDecoder jwtDecoder;
+
+    @MockBean
+    private BusinessMetrics businessMetrics;
 
     @Test
     void requisicaoSemTokenRetorna401ComContratoPadronizado() throws Exception {

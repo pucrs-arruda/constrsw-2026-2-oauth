@@ -5,7 +5,9 @@ import com.seugrupo.oauth.dto.PatchRoleRequest;
 import com.seugrupo.oauth.dto.RoleResponse;
 import com.seugrupo.oauth.dto.UpdateRoleRequest;
 import com.seugrupo.oauth.exception.GlobalExceptionHandler;
+import com.seugrupo.oauth.metrics.BusinessMetrics;
 import com.seugrupo.oauth.service.KeycloakRoleService;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
@@ -43,7 +45,7 @@ class RoleControllerTest {
         LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
         validator.afterPropertiesSet();
         mockMvc = org.springframework.test.web.servlet.setup.MockMvcBuilders
-                .standaloneSetup(new RoleController(roleService))
+                .standaloneSetup(new RoleController(roleService, new BusinessMetrics(new SimpleMeterRegistry())))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setValidator(validator)
                 .build();

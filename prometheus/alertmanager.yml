@@ -1,0 +1,18 @@
+global:
+  resolve_timeout: 5m
+
+# Agrupa alertas com o mesmo alertname+job numa unica notificacao,
+# espera 10s pra juntar alertas correlatos antes de disparar o primeiro
+# aviso, e evita repetir o mesmo alerta com mais frequencia que 1h.
+route:
+  receiver: 'default'
+  group_by: ['alertname', 'job', 'service']
+  group_wait: 10s
+  group_interval: 30s
+  repeat_interval: 1h
+
+receivers:
+  # Sem integracao externa (Slack/e-mail) neste ambiente de laboratorio -
+  # o objetivo aqui e demonstrar roteamento, agrupamento e silenciamento
+  # de alertas via UI/API do Alertmanager (http://localhost:9093).
+  - name: 'default'

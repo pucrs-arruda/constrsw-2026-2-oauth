@@ -6,7 +6,9 @@ import com.seugrupo.oauth.dto.UpdateUserRequest;
 import com.seugrupo.oauth.dto.UserResponse;
 import com.seugrupo.oauth.exception.GlobalExceptionHandler;
 import com.seugrupo.oauth.exception.OAuthApiException;
+import com.seugrupo.oauth.metrics.BusinessMetrics;
 import com.seugrupo.oauth.service.KeycloakUserService;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
@@ -45,7 +47,7 @@ class UserControllerTest {
         LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
         validator.afterPropertiesSet();
         mockMvc = org.springframework.test.web.servlet.setup.MockMvcBuilders
-                .standaloneSetup(new UserController(userService))
+                .standaloneSetup(new UserController(userService, new BusinessMetrics(new SimpleMeterRegistry())))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setValidator(validator)
                 .build();
