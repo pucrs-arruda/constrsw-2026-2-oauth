@@ -1,4 +1,4 @@
-package br.pucrs.constrsw.oauth.error;
+package br.pucrs.constrsw.oauth.domain;
 
 public class InvalidLoginRequestException extends RuntimeException {
 

@@ -16,6 +16,8 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import br.pucrs.constrsw.oauth.dto.ApiErrorResponse;
+import br.pucrs.constrsw.oauth.domain.RoleNotFoundException;
+import br.pucrs.constrsw.oauth.domain.InvalidLoginRequestException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -59,6 +61,11 @@ public class GlobalExceptionHandler {
         HttpStatus status = HttpStatus.resolve(exception.getStatus());
         if (status == null) status = HttpStatus.BAD_GATEWAY;
         return error(status, exception.getMessage(), stack);
+    }
+
+    @ExceptionHandler(RoleNotFoundException.class)
+    ResponseEntity<ApiErrorResponse> handleRoleNotFound(RoleNotFoundException exception) {
+        return error(HttpStatus.NOT_FOUND, exception.getMessage(), Collections.emptyList());
     }
 
     private List<Map<String, Object>> parseErrorBody(String body) {

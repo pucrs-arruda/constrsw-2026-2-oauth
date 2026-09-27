@@ -1,11 +1,11 @@
 package br.pucrs.constrsw.oauth.client;
 
 import br.pucrs.constrsw.oauth.config.KeycloakProperties;
-import br.pucrs.constrsw.oauth.dto.CreateUserRequest;
-import br.pucrs.constrsw.oauth.dto.UpdatePasswordRequest;
-import br.pucrs.constrsw.oauth.dto.UpdateUserRequest;
-import br.pucrs.constrsw.oauth.dto.UserResponse;
+import br.pucrs.constrsw.oauth.domain.CreateUserCommand;
+import br.pucrs.constrsw.oauth.domain.UpdateUserCommand;
+import br.pucrs.constrsw.oauth.domain.User;
 import br.pucrs.constrsw.oauth.error.KeycloakServiceException;
+import br.pucrs.constrsw.oauth.port.UserGateway;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -22,7 +22,7 @@ import java.util.List;
 import java.util.Map;
 
 @Component
-public class UserClient {
+public class UserClient implements UserGateway {
 
     private final RestClient restClient;
     private final KeycloakProperties properties;
@@ -34,7 +34,8 @@ public class UserClient {
         this.objectMapper = objectMapper;
     }
 
-    public UserResponse create(String authorization, CreateUserRequest request) {
+    @Override
+    public User create(String authorization, CreateUserCommand request) {
         ObjectNode body = objectMapper.createObjectNode()
                 .put("username", request.username())
             .put("email", request.username())
@@ -54,7 +55,7 @@ public class UserClient {
                     .retrieve()
                     .toBodilessEntity();
             String id = userIdFromLocation(response.getHeaders());
-            return new UserResponse(id, request.username(), request.firstName(), request.lastName(), true);
+            return new User(id, request.username(), request.firstName(), request.lastName(), true);
         } catch (RestClientResponseException exception) {
             throw keycloakException(exception, "Failed to create user");
         } catch (RestClientException exception) {
@@ -62,7 +63,8 @@ public class UserClient {
         }
     }
 
-    public List<UserResponse> findAll(String authorization) {
+    @Override
+    public List<User> findAll(String authorization) {
         try {
             List<JsonNode> users = restClient.get()
                     .uri("/admin/realms/{realm}/users", properties.realm())
@@ -72,7 +74,7 @@ public class UserClient {
             if (users == null) {
                 return List.of();
             }
-            return users.stream().map(this::toUserResponse).toList();
+            return users.stream().map(this::toUser).toList();
         } catch (RestClientResponseException exception) {
             throw keycloakException(exception, "Failed to retrieve users");
         } catch (RestClientException exception) {
@@ -80,14 +82,15 @@ public class UserClient {
         }
     }
 
-    public UserResponse findById(String authorization, String id) {
+    @Override
+    public User findById(String authorization, String id) {
         try {
             JsonNode user = restClient.get()
                     .uri("/admin/realms/{realm}/users/{id}", properties.realm(), id)
                     .headers(headers -> bearer(headers, authorization))
                     .retrieve()
                     .body(JsonNode.class);
-            return toUserResponse(user);
+            return toUser(user);
         } catch (RestClientResponseException exception) {
             throw keycloakException(exception, "Failed to retrieve user");
         } catch (RestClientException exception) {
@@ -95,7 +98,8 @@ public class UserClient {
         }
     }
 
-    public void update(String authorization, String id, UpdateUserRequest request) {
+    @Override
+    public void update(String authorization, String id, UpdateUserCommand request) {
         ObjectNode body = objectMapper.createObjectNode()
                 .put("firstName", request.firstName())
                 .put("lastName", request.lastName())
@@ -103,10 +107,11 @@ public class UserClient {
         updateUser(authorization, id, body, "Failed to update user");
     }
 
-    public void updatePassword(String authorization, String id, UpdatePasswordRequest request) {
+    @Override
+    public void updatePassword(String authorization, String id, String password) {
         ObjectNode body = objectMapper.createObjectNode()
                 .put("type", "password")
-                .put("value", request.password())
+                .put("value", password)
                 .put("temporary", false);
         try {
             restClient.put()
@@ -122,6 +127,7 @@ public class UserClient {
         }
     }
 
+    @Override
     public void disable(String authorization, String id) {
         ObjectNode body = objectMapper.createObjectNode().put("enabled", false);
         updateUser(authorization, id, body, "Failed to disable user");
@@ -142,8 +148,8 @@ public class UserClient {
         }
     }
 
-    private UserResponse toUserResponse(JsonNode user) {
-        return new UserResponse(
+    private User toUser(JsonNode user) {
+        return new User(
                 user.path("id").asText(),
                 user.path("username").asText(),
                 user.path("firstName").asText(),

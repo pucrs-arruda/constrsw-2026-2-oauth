@@ -1,10 +1,9 @@
 package br.pucrs.constrsw.oauth.service;
 
-import br.pucrs.constrsw.oauth.client.UserClient;
-import br.pucrs.constrsw.oauth.dto.CreateUserRequest;
-import br.pucrs.constrsw.oauth.dto.UpdatePasswordRequest;
-import br.pucrs.constrsw.oauth.dto.UpdateUserRequest;
-import br.pucrs.constrsw.oauth.dto.UserResponse;
+import br.pucrs.constrsw.oauth.domain.CreateUserCommand;
+import br.pucrs.constrsw.oauth.domain.UpdateUserCommand;
+import br.pucrs.constrsw.oauth.domain.User;
+import br.pucrs.constrsw.oauth.port.UserGateway;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -18,18 +17,18 @@ class UserServiceTest {
 
     private static final String AUTHORIZATION = "Bearer user-token";
 
-    private final UserClient userClient = mock(UserClient.class);
+    private final UserGateway userClient = mock(UserGateway.class);
     private final UserService userService = new UserService(userClient);
 
     @Test
     void delegatesUserCreation() {
-        CreateUserRequest request = new CreateUserRequest(
+        CreateUserCommand request = new CreateUserCommand(
                 "user@example.com", "secret", "First", "Last");
-        UserResponse expected = new UserResponse(
+        User expected = new User(
                 "user-id", "user@example.com", "First", "Last", true);
         when(userClient.create(AUTHORIZATION, request)).thenReturn(expected);
 
-        UserResponse response = userService.create(AUTHORIZATION, request);
+        User response = userService.create(AUTHORIZATION, request);
 
         assertThat(response).isEqualTo(expected);
         verify(userClient).create(AUTHORIZATION, request);
@@ -37,11 +36,11 @@ class UserServiceTest {
 
     @Test
     void delegatesUserListing() {
-        List<UserResponse> expected = List.of(
-                new UserResponse("user-id", "user@example.com", "First", "Last", true));
+        List<User> expected = List.of(
+                new User("user-id", "user@example.com", "First", "Last", true));
         when(userClient.findAll(AUTHORIZATION)).thenReturn(expected);
 
-        List<UserResponse> response = userService.findAll(AUTHORIZATION);
+        List<User> response = userService.findAll(AUTHORIZATION);
 
         assertThat(response).isEqualTo(expected);
         verify(userClient).findAll(AUTHORIZATION);
@@ -49,11 +48,11 @@ class UserServiceTest {
 
     @Test
     void delegatesFindingUserById() {
-        UserResponse expected = new UserResponse(
+        User expected = new User(
                 "user-id", "user@example.com", "First", "Last", true);
         when(userClient.findById(AUTHORIZATION, "user-id")).thenReturn(expected);
 
-        UserResponse response = userService.findById(AUTHORIZATION, "user-id");
+        User response = userService.findById(AUTHORIZATION, "user-id");
 
         assertThat(response).isEqualTo(expected);
         verify(userClient).findById(AUTHORIZATION, "user-id");
@@ -61,7 +60,7 @@ class UserServiceTest {
 
     @Test
     void delegatesUserUpdate() {
-        UpdateUserRequest request = new UpdateUserRequest("Updated", "User", true);
+        UpdateUserCommand request = new UpdateUserCommand("Updated", "User", true);
 
         userService.update(AUTHORIZATION, "user-id", request);
 
@@ -70,11 +69,9 @@ class UserServiceTest {
 
     @Test
     void delegatesPasswordUpdate() {
-        UpdatePasswordRequest request = new UpdatePasswordRequest("new-secret");
+        userService.updatePassword(AUTHORIZATION, "user-id", "new-secret");
 
-        userService.updatePassword(AUTHORIZATION, "user-id", request);
-
-        verify(userClient).updatePassword(AUTHORIZATION, "user-id", request);
+        verify(userClient).updatePassword(AUTHORIZATION, "user-id", "new-secret");
     }
 
     @Test

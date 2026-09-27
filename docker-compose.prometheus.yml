@@ -20,5 +20,27 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  grafana:
+    image: grafana/grafana:12.4.0
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-localdev}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./backend/oauth/grafana/provisioning/datasources/prometheus.yml:/etc/grafana/provisioning/datasources/prometheus.yml:ro
+      - ./backend/oauth/grafana/provisioning/dashboards/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
+      - ./backend/oauth/grafana/dashboards:/etc/grafana/dashboards:ro
+    ports:
+      - "127.0.0.1:${GRAFANA_EXTERNAL_PORT:-3000}:3000"
+    networks:
+      - constrsw
+    depends_on:
+      prometheus:
+        condition: service_started
+    restart: unless-stopped
+
 volumes:
   prometheus-data:
+  grafana-data:
