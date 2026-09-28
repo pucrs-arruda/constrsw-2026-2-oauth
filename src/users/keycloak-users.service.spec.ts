@@ -214,6 +214,14 @@ describe('KeycloakUsersService', () => {
       expect(error.getStatus()).toBe(404);
       expect(error.toEnvelope().error_code).toBe('OA-404');
     });
+
+    it('reports 502 when Keycloak returns a user without an id', async () => {
+      upstream(() => jsonResponse({ username: 'aluno@pucrs.br' }));
+
+      const error = await rejection(service.getUser(USER_ID));
+
+      expect(error.getStatus()).toBe(502);
+    });
   });
 
   describe('updateUser', () => {
@@ -248,6 +256,22 @@ describe('KeycloakUsersService', () => {
 
       expect(error.getStatus()).toBe(404);
     });
+
+    it('reports 409 on an update conflict', async () => {
+      upstream((url, init) => {
+        if (url === `${ADMIN_BASE}/users/${USER_ID}` && init?.method === 'PUT') {
+          return jsonResponse({}, 409);
+        }
+        if (url === `${ADMIN_BASE}/users/${USER_ID}`) {
+          return jsonResponse(storedUser);
+        }
+        return undefined;
+      });
+
+      const error = await rejection(service.updateUser(USER_ID, { firstName: 'X' }));
+
+      expect(error.getStatus()).toBe(409);
+    });
   });
 
   describe('changePassword', () => {
@@ -280,6 +304,18 @@ describe('KeycloakUsersService', () => {
       upstream((url) =>
         url === `${ADMIN_BASE}/users/${USER_ID}` ? jsonResponse({}, 404) : undefined,
       );
+
+      const error = await rejection(service.changePassword(USER_ID, 'nova'));
+
+      expect(error.getStatus()).toBe(404);
+    });
+
+    it('reports 404 when the reset-password call itself 404s', async () => {
+      upstream((url) => {
+        if (url.endsWith('/reset-password')) return jsonResponse({}, 404);
+        if (url === `${ADMIN_BASE}/users/${USER_ID}`) return jsonResponse(storedUser);
+        return undefined;
+      });
 
       const error = await rejection(service.changePassword(USER_ID, 'nova'));
 

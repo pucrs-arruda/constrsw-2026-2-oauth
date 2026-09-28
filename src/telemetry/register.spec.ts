@@ -7,6 +7,7 @@ describe('oauth prometheus metrics', () => {
   let baseUrl = '';
   let closeApp: () => Promise<void> = async () => undefined;
   let stopTelemetry: () => Promise<void> = async () => undefined;
+  let startTelemetry: () => void = () => undefined;
 
   beforeAll(async () => {
     process.env.OAUTH_INTERNAL_METRICS_PORT = String(METRICS_PORT);
@@ -16,6 +17,7 @@ describe('oauth prometheus metrics', () => {
 
     const telemetry = await import('./register');
     stopTelemetry = telemetry.stopTelemetry;
+    startTelemetry = telemetry.startTelemetry;
 
     const { Test } = await import('@nestjs/testing');
     const { AppModule } = await import('../app.module');
@@ -75,5 +77,17 @@ describe('oauth prometheus metrics', () => {
     expect(body).not.toContain(PASSWORD);
     expect(body).not.toContain(ACCESS_TOKEN);
     expect(body).not.toContain(CLIENT_SECRET);
+  });
+
+  it('is idempotent: starting an already-started SDK is a no-op', () => {
+    expect(() => startTelemetry()).not.toThrow();
+  });
+
+  it('is safe to stop twice', async () => {
+    await stopTelemetry();
+    await expect(stopTelemetry()).resolves.toBeUndefined();
+    // Restart so afterAll's stopTelemetry() call still has an SDK to close
+    // cleanly, keeping this test isolated from suite teardown.
+    startTelemetry();
   });
 });
