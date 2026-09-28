@@ -129,7 +129,7 @@ class KeycloakClientTest {
         MultiValueMap<String, String> expectedForm = new LinkedMultiValueMap<>();
         expectedForm.add("grant_type", "urn:ietf:params:oauth:grant-type:uma-ticket");
         expectedForm.add("audience", "oauth");
-        expectedForm.add("permission", "/courses");
+        expectedForm.add("permission", "/lessons");
         expectedForm.add("permission_resource_format", "uri");
         expectedForm.add("response_mode", "decision");
 
@@ -139,7 +139,7 @@ class KeycloakClientTest {
                 .andExpect(content().formData(expectedForm))
                 .andRespond(withSuccess("{\"result\":true}", MediaType.APPLICATION_JSON));
 
-        assertThat(keycloakClient.hasAccess("Bearer access-token", "/courses")).isTrue();
+        assertThat(keycloakClient.hasAccess("Bearer access-token", "/lessons")).isTrue();
         server.verify();
     }
 
@@ -150,7 +150,7 @@ class KeycloakClientTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .body("{\"error\":\"access_denied\"}"));
 
-        assertThat(keycloakClient.hasAccess("Bearer access-token", "/courses")).isFalse();
+        assertThat(keycloakClient.hasAccess("Bearer access-token", "/lessons")).isFalse();
         server.verify();
     }
 
@@ -161,7 +161,7 @@ class KeycloakClientTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .body("{\"error\":\"invalid_token\"}"));
 
-        assertThatThrownBy(() -> keycloakClient.hasAccess("Bearer invalid-token", "/courses"))
+        assertThatThrownBy(() -> keycloakClient.hasAccess("Bearer invalid-token", "/lessons"))
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessage("Invalid access token");
         server.verify();

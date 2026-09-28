@@ -117,7 +117,7 @@ health. Grafana data persists in the `grafana-data` Docker volume.
 | `GET` | `/health` | Reports API health. |
 | `POST` | `/login` | Authenticates a user with Keycloak. Accepts `username` and `password` as `multipart/form-data`; returns access and refresh tokens with HTTP `201`. |
 | `POST` | `/refresh` | Accepts `refresh_token` as `multipart/form-data`; returns new access and refresh tokens with HTTP `200`. |
-| `GET` | `/access?resource=/courses` | Evaluates the Bearer token against a Keycloak resource URI; returns `200` when access is granted, `403` when denied, and `401` for an invalid token. |
+| `GET` | `/access?resource=/lessons` | Evaluates the Bearer token against a Keycloak resource URI; returns `200` when access is granted, `403` when denied, and `401` for an invalid token. |
 | `POST` | `/users` | Creates a user. |
 | `GET` | `/users` | Lists users. |
 | `GET` | `/users/{id}` | Retrieves a user. |
@@ -150,11 +150,11 @@ curl --request POST http://localhost:8181/refresh \
 
 ### Resource-access example
 
-Pass the resource URI configured in Keycloak, such as `/courses`, along with the user's access token:
+Pass the resource URI configured in Keycloak, such as `/lessons`, along with the user's access token:
 
 ```bash
 curl --get http://localhost:8181/access \
-  --data-urlencode 'resource=/courses' \
+  --data-urlencode 'resource=/lessons' \
   --header 'Authorization: Bearer YOUR_ACCESS_TOKEN'
 ```
 
