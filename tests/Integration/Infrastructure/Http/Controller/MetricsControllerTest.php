@@ -49,4 +49,33 @@ final class MetricsControllerTest extends WebTestCase
         $this->assertStringContainsString('http_requests_total', $content);
         $this->assertStringContainsString('status="200"', $content);
     }
+
+    public function testBusinessMetricsRecordedOnAuthEndpoints(): void
+    {
+        // 1. Dispara requisição com falha de validação em login (POST /login vazio -> 400)
+        $this->client->request(
+            method: 'POST',
+            uri: '/login',
+            server: ['CONTENT_TYPE' => 'application/json'],
+            content: json_encode([], JSON_THROW_ON_ERROR)
+        );
+        $this->assertSame(Response::HTTP_BAD_REQUEST, $this->client->getResponse()->getStatusCode());
+
+        // 2. Dispara requisição com falha de validação em autorização (POST /authorize sem header -> 401)
+        $this->client->request(
+            method: 'POST',
+            uri: '/authorize',
+            server: ['CONTENT_TYPE' => 'application/json'],
+            content: json_encode([], JSON_THROW_ON_ERROR)
+        );
+        $this->assertSame(Response::HTTP_UNAUTHORIZED, $this->client->getResponse()->getStatusCode());
+
+        // 3. Consulta endpoint de métricas e valida presença das métricas de negócio
+        $this->client->request('GET', '/metrics');
+        $content = (string) $this->client->getResponse()->getContent();
+
+        $this->assertStringContainsString('oauth_logins_total', $content);
+        $this->assertStringContainsString('status="failure"', $content);
+        $this->assertStringContainsString('oauth_authorizations_total', $content);
+    }
 }

@@ -68,6 +68,22 @@ class MetricsRequestListener implements EventSubscriberInterface
 
         $this->metricsRegistry->incrementCounter('http_requests_total', $labels);
 
+        // Métricas especializadas de negócio e segurança do domínio OAuth
+        if ($route === 'auth_login') {
+            $statusLabel = ((int) $statusCode >= 200 && (int) $statusCode < 300) ? 'success' : 'failure';
+            $this->metricsRegistry->incrementCounter('oauth_logins_total', ['status' => $statusLabel]);
+        } elseif ($route === 'auth_refresh') {
+            $statusLabel = ((int) $statusCode >= 200 && (int) $statusCode < 300) ? 'success' : 'failure';
+            $this->metricsRegistry->incrementCounter('oauth_token_refreshes_total', ['status' => $statusLabel]);
+        } elseif ($route === 'authz_authorize') {
+            $resultLabel = match ((int) $statusCode) {
+                200 => 'granted',
+                403 => 'denied',
+                default => 'error',
+            };
+            $this->metricsRegistry->incrementCounter('oauth_authorizations_total', ['result' => $resultLabel]);
+        }
+
         $startTime = $request->attributes->get(self::START_TIME_ATTRIBUTE);
         if (is_float($startTime)) {
             $duration = microtime(true) - $startTime;
