@@ -17,9 +17,68 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
-  "id": null,
+  "id": 2,
   "links": [],
   "liveNow": false,
+  "refresh": "10s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": [
+    "oauth",
+    "keycloak",
+    "pucrs",
+    "security",
+    "observability",
+    "symfony"
+  ],
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "5s",
+      "10s",
+      "30s",
+      "1m",
+      "5m",
+      "15m"
+    ],
+    "time_options": [
+      "5m",
+      "15m",
+      "1h",
+      "6h",
+      "12h",
+      "24h"
+    ]
+  },
+  "timezone": "browser",
+  "title": "OAuth & Keycloak Microservice — Centro de Observabilidade",
+  "uid": "oauth-microservice-dashboard",
+  "version": 3,
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": true,
+          "text": "Prometheus",
+          "value": "PBFA97CFB590B2093"
+        },
+        "hide": 0,
+        "includeAll": false,
+        "label": "Data Source",
+        "multi": false,
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      }
+    ]
+  },
   "panels": [
     {
       "collapsed": false,
@@ -30,7 +89,7 @@
         "y": 0
       },
       "id": 100,
-      "title": "Visão Geral e Indicadores Principais (KPIs)",
+      "title": "⚡ Indicadores Chave de Nível de Serviço (SLOs & KPIs)",
       "type": "row"
     },
     {
@@ -38,28 +97,13 @@
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
+      "description": "Percentual de disponibilidade do microserviço nos últimos 15 minutos baseado na verificação contínua do Prometheus (SLO alvo: >= 99.5%).",
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "thresholds"
           },
-          "mappings": [
-            {
-              "options": {
-                "0": {
-                  "color": "red",
-                  "index": 0,
-                  "text": "OFFLINE"
-                },
-                "1": {
-                  "color": "green",
-                  "index": 1,
-                  "text": "ONLINE"
-                }
-              },
-              "type": "value"
-            }
-          ],
+          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -68,24 +112,29 @@
                 "value": null
               },
               {
+                "color": "yellow",
+                "value": 95
+              },
+              {
                 "color": "green",
-                "value": 1
+                "value": 99.5
               }
             ]
-          }
+          },
+          "unit": "percent"
         },
         "overrides": []
       },
       "gridPos": {
-        "h": 4,
+        "h": 3,
         "w": 4,
         "x": 0,
         "y": 1
       },
       "id": 1,
       "options": {
-        "colorMode": "background",
-        "graphMode": "none",
+        "colorMode": "value",
+        "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
@@ -105,13 +154,12 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "up{job=~\"oauth|auth\"} or vector(1)",
-          "instant": true,
-          "range": false,
+          "expr": "avg_over_time(up{job=\"oauth\"}[15m]) * 100",
+          "instant": false,
           "refId": "A"
         }
       ],
-      "title": "Status da API OAuth",
+      "title": "Disponibilidade (Uptime)",
       "type": "stat"
     },
     {
@@ -119,18 +167,23 @@
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
+      "description": "Taxa agregada de requisições HTTP por segundo atendidas pelo microserviço em todas as rotas combinadas.",
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "palette-classic"
           },
+          "custom": {
+            "lineColor": "#00e5ff"
+          },
+          "mappings": [],
           "unit": "reqps"
         },
         "overrides": []
       },
       "gridPos": {
-        "h": 4,
-        "w": 5,
+        "h": 3,
+        "w": 4,
         "x": 4,
         "y": 1
       },
@@ -155,11 +208,13 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum(rate(http_requests_total{job=~\"oauth|auth\"}[1m])) or vector(0)",
+          "editorMode": "code",
+          "expr": "sum(rate(http_requests_total{job=\"oauth\"}[1m])) or vector(0)",
+          "instant": false,
           "refId": "A"
         }
       ],
-      "title": "Throughput Geral (RPS)",
+      "title": "Vazão Global (RPS)",
       "type": "stat"
     },
     {
@@ -167,11 +222,13 @@
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
+      "description": "Porcentagem de requisições com falha interna do servidor (HTTP 5xx). Alvo aceitável para produção: < 0.5%.",
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "thresholds"
           },
+          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -181,11 +238,11 @@
               },
               {
                 "color": "yellow",
-                "value": 2
+                "value": 0.5
               },
               {
                 "color": "red",
-                "value": 5
+                "value": 2.0
               }
             ]
           },
@@ -194,9 +251,9 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 4,
-        "w": 5,
-        "x": 9,
+        "h": 3,
+        "w": 4,
+        "x": 8,
         "y": 1
       },
       "id": 3,
@@ -220,7 +277,9 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "((sum(rate(http_requests_total{job=~\"oauth|auth\", status=~\"5..\"}[5m])) or vector(0)) / clamp_min(sum(rate(http_requests_total{job=~\"oauth|auth\"}[5m])), 0.001)) * 100",
+          "editorMode": "code",
+          "expr": "((sum(rate(http_requests_total{job=\"oauth\", status=~\"5..\"}[5m])) or vector(0)) / (sum(rate(http_requests_total{job=\"oauth\"}[5m])) > 0 or vector(1))) * 100",
+          "instant": false,
           "refId": "A"
         }
       ],
@@ -232,11 +291,13 @@
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
+      "description": "Tempo médio que a API leva para processar e responder uma requisição HTTP, medido em milissegundos.",
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "thresholds"
           },
+          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -246,11 +307,11 @@
               },
               {
                 "color": "yellow",
-                "value": 200
+                "value": 150
               },
               {
                 "color": "red",
-                "value": 1000
+                "value": 400
               }
             ]
           },
@@ -259,9 +320,9 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 4,
-        "w": 5,
-        "x": 14,
+        "h": 3,
+        "w": 4,
+        "x": 12,
         "y": 1
       },
       "id": 4,
@@ -285,11 +346,13 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "((sum(rate(http_request_duration_seconds_sum{job=~\"oauth|auth\"}[5m])) or vector(0)) / clamp_min(sum(rate(http_request_duration_seconds_count{job=~\"oauth|auth\"}[5m])), 0.001)) * 1000",
+          "editorMode": "code",
+          "expr": "((sum(rate(http_request_duration_seconds_sum{job=\"oauth\"}[5m])) or vector(0)) / (sum(rate(http_request_duration_seconds_count{job=\"oauth\"}[5m])) > 0 or vector(1))) * 1000",
+          "instant": false,
           "refId": "A"
         }
       ],
-      "title": "Latência Média da API",
+      "title": "Latência Média",
       "type": "stat"
     },
     {
@@ -297,42 +360,44 @@
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
+      "description": "Taxa de autenticações bem-sucedidas no endpoint /login em relação ao total de tentativas (sucessos vs falhas de credenciais).",
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "thresholds"
           },
+          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "red",
                 "value": null
               },
               {
                 "color": "yellow",
-                "value": 64
+                "value": 80
               },
               {
-                "color": "red",
-                "value": 128
+                "color": "green",
+                "value": 95
               }
             ]
           },
-          "unit": "decmbytes"
+          "unit": "percent"
         },
         "overrides": []
       },
       "gridPos": {
-        "h": 4,
-        "w": 5,
-        "x": 19,
+        "h": 3,
+        "w": 4,
+        "x": 16,
         "y": 1
       },
       "id": 5,
       "options": {
         "colorMode": "value",
-        "graphMode": "none",
+        "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
@@ -350,11 +415,82 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "php_memory_bytes{job=~\"oauth|auth\"} / 1024 / 1024",
+          "editorMode": "code",
+          "expr": "((sum(increase(oauth_logins_total{job=\"oauth\", status=\"success\"}[15m])) or vector(0)) / (sum(increase(oauth_logins_total{job=\"oauth\"}[15m])) > 0 or vector(1))) * 100",
+          "instant": false,
           "refId": "A"
         }
       ],
-      "title": "Memória PHP Alocada",
+      "title": "Sucesso em Logins",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "description": "Quantidade atual de memória RAM alocada diretamente pelo processo PHP (em Megabytes).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 33554432
+              },
+              {
+                "color": "red",
+                "value": 67108864
+              }
+            ]
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 20,
+        "y": 1
+      },
+      "id": 6,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "php_memory_bytes{job=\"oauth\"}",
+          "instant": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Memória PHP (RAM)",
       "type": "stat"
     },
     {
@@ -363,10 +499,10 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 5
+        "y": 4
       },
       "id": 101,
-      "title": "Tráfego HTTP e Desempenho",
+      "title": "📈 Desempenho do Runtime PHP & Vazão de Requisições",
       "type": "row"
     },
     {
@@ -374,13 +510,120 @@
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
+      "description": "Evolução do consumo de memória do PHP ao longo do tempo. Compara a alocação instantânea de heap com o pico histórico registrado pelo container. Picos elevados indicam operações custosas (como serialização de grandes listas ou geração de chaves criptográficas).",
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "palette-classic"
           },
           "custom": {
-            "fillOpacity": 15,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "Memória",
+            "axisPlacement": "auto",
+            "fillOpacity": 20,
+            "gradientMode": "opacity",
+            "lineWidth": 2,
+            "spanNulls": true
+          },
+          "unit": "bytes"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Uso Atual de Memória"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#73BF69",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Pico Máximo de Alocação"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#F2CC0C",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 5
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "php_memory_bytes{job=\"oauth\"}",
+          "legendFormat": "Uso Atual de Memória",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "php_memory_peak_bytes{job=\"oauth\"}",
+          "legendFormat": "Pico Máximo de Alocação",
+          "refId": "B"
+        }
+      ],
+      "title": "Alocação de Memória PHP (Uso Atual vs Pico)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "description": "Taxa de requisições por segundo discriminada por rota HTTP e método. Permite identificar gargalos em rotas específicas (ex: /login, /users, /authorize) e analisar a distribuição do tráfego.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "Requisições/s",
+            "axisPlacement": "auto",
+            "fillOpacity": 12,
             "gradientMode": "none",
             "lineWidth": 2,
             "spanNulls": true
@@ -390,19 +633,25 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 6
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 5
       },
-      "id": 6,
+      "id": 8,
       "options": {
         "legend": {
+          "calcs": [
+            "max",
+            "lastNotNull"
+          ],
           "displayMode": "table",
-          "placement": "bottom"
+          "placement": "bottom",
+          "showLegend": true
         },
         "tooltip": {
-          "mode": "multi"
+          "mode": "multi",
+          "sort": "desc"
         }
       },
       "targets": [
@@ -411,12 +660,12 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum(rate(http_requests_total{job=~\"oauth|auth\"}[1m])) by (route, method)",
+          "expr": "sum by (route, method) (rate(http_requests_total{job=\"oauth\"}[2m]))",
           "legendFormat": "{{method}} {{route}}",
           "refId": "A"
         }
       ],
-      "title": "Taxa de Requisições por Rota (RPS)",
+      "title": "Vazão por Rota HTTP (RPS)",
       "type": "timeseries"
     },
     {
@@ -424,34 +673,141 @@
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
+      "description": "Volume de respostas por código de status HTTP empilhado no tempo. Verde para 200/201/204 (sucessos), amarelo/laranja para 400/403/404 (erros de cliente) e vermelho para 500 (erros do servidor).",
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "palette-classic"
           },
           "custom": {
-            "fillOpacity": 10,
-            "lineWidth": 2,
-            "spanNulls": true
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "Volume",
+            "axisPlacement": "auto",
+            "fillOpacity": 70,
+            "gradientMode": "none",
+            "lineWidth": 1,
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            }
           },
-          "unit": "ms"
+          "unit": "short"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "HTTP 200"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#73BF69",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "HTTP 201"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#299c46",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "HTTP 204"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#5794F2",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "HTTP 403"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FF9830",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "HTTP 404"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#B877D9",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "HTTP 500"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#F2495C",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 6
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 5
       },
-      "id": 7,
+      "id": 9,
       "options": {
         "legend": {
+          "calcs": [
+            "sum",
+            "lastNotNull"
+          ],
           "displayMode": "table",
-          "placement": "bottom"
+          "placement": "bottom",
+          "showLegend": true
         },
         "tooltip": {
-          "mode": "multi"
+          "mode": "multi",
+          "sort": "desc"
         }
       },
       "targets": [
@@ -460,12 +816,12 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "((sum(rate(http_request_duration_seconds_sum{job=~\"oauth|auth\"}[5m])) by (route)) / clamp_min(sum(rate(http_request_duration_seconds_count{job=~\"oauth|auth\"}[5m])) by (route), 0.001)) * 1000",
-          "legendFormat": "{{route}}",
+          "expr": "sum by (status) (increase(http_requests_total{job=\"oauth\"}[2m]))",
+          "legendFormat": "HTTP {{status}}",
           "refId": "A"
         }
       ],
-      "title": "Tempo Médio de Resposta por Rota (ms)",
+      "title": "Volume Empilhado por Código HTTP",
       "type": "timeseries"
     },
     {
@@ -474,10 +830,10 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 14
+        "y": 12
       },
       "id": 102,
-      "title": "Segurança e Autenticação (Logins, Tokens e RBAC)",
+      "title": "⏱️ Latência por Rota, Erros & Distribuição de Tráfego",
       "type": "row"
     },
     {
@@ -485,193 +841,261 @@
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
+      "description": "Tempo médio de resposta (ms) calculado individualmente para cada rota. Permite detectar endpoints lentos que dependem de I/O externo com o Keycloak (ex: /login e criação de usuários).",
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "palette-classic"
           },
           "custom": {
-            "fillOpacity": 25,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "Latência (ms)",
+            "axisPlacement": "auto",
+            "fillOpacity": 15,
+            "gradientMode": "none",
             "lineWidth": 2,
             "spanNulls": true
           },
-          "unit": "opm"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Sucesso (200 OK)"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "green",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Falha / Inválido"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "red",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 0,
-        "y": 15
-      },
-      "id": 8,
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
-          "expr": "sum(increase(oauth_logins_total{job=~\"oauth|auth\", status=\"success\"}[5m])) or vector(0)",
-          "legendFormat": "Sucesso (200 OK)",
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
-          "expr": "sum(increase(oauth_logins_total{job=~\"oauth|auth\", status=\"failure\"}[5m])) or vector(0)",
-          "legendFormat": "Falha / Inválido",
-          "refId": "B"
-        }
-      ],
-      "title": "Tentativas de Login (por minuto)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "fillOpacity": 25,
-            "lineWidth": 2,
-            "spanNulls": true
-          },
-          "unit": "opm"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Acesso Permitido (200)"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "green",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Acesso Negado (403)"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "orange",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 8,
-        "y": 15
-      },
-      "id": 9,
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
-          "expr": "sum(increase(oauth_authorizations_total{job=~\"oauth|auth\", result=\"granted\"}[5m])) or vector(0)",
-          "legendFormat": "Acesso Permitido (200)",
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
-          "expr": "sum(increase(oauth_authorizations_total{job=~\"oauth|auth\", result=\"denied\"}[5m])) or vector(0)",
-          "legendFormat": "Acesso Negado (403)",
-          "refId": "B"
-        }
-      ],
-      "title": "Avaliações RBAC (/authorize)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          }
+          "unit": "ms"
         },
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
+        "h": 7,
         "w": 8,
-        "x": 16,
-        "y": 15
+        "x": 0,
+        "y": 13
       },
       "id": 10,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "((sum by (route) (rate(http_request_duration_seconds_sum{job=\"oauth\"}[5m])) or vector(0)) / (sum by (route) (rate(http_request_duration_seconds_count{job=\"oauth\"}[5m])) > 0 or vector(1))) * 1000",
+          "legendFormat": "{{route}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Tempo de Resposta por Endpoint (ms)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "description": "Comparação direta entre erros 4xx (problemas no lado do cliente, como credenciais inválidas ou URLs erradas) e erros 5xx (falhas de conexão ou crashes internos da aplicação).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "Erros/s",
+            "axisPlacement": "auto",
+            "fillOpacity": 25,
+            "gradientMode": "opacity",
+            "lineWidth": 2,
+            "spanNulls": true
+          },
+          "unit": "reqps"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Erros de Cliente (4xx)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FF9830",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Erros de Servidor (5xx)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#F2495C",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 13
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "calcs": [
+            "max",
+            "sum"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "sum(rate(http_requests_total{job=\"oauth\", status=~\"4..\"}[2m])) or vector(0)",
+          "legendFormat": "Erros de Cliente (4xx)",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "sum(rate(http_requests_total{job=\"oauth\", status=~\"5..\"}[2m])) or vector(0)",
+          "legendFormat": "Erros de Servidor (5xx)",
+          "refId": "B"
+        }
+      ],
+      "title": "Erros de Cliente (4xx) vs Servidor (5xx)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "description": "Proporção consolidada de todas as respostas servidas pelo microserviço desde a inicialização. Permite visualizar rapidamente a saúde geral e eficácia das chamadas.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Status 200"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#73BF69",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Status 201"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#299c46",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Status 204"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#5794F2",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Status 403"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FF9830",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Status 404"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#B877D9",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 13
+      },
+      "id": 12,
       "options": {
         "displayLabels": [
           "percent",
@@ -679,9 +1103,23 @@
         ],
         "legend": {
           "displayMode": "table",
-          "placement": "right"
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
         },
-        "pieType": "donut"
+        "pieType": "donut",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
       },
       "targets": [
         {
@@ -689,61 +1127,418 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum(http_requests_total{job=~\"oauth|auth\"}) by (status)",
+          "expr": "sum(http_requests_total{job=\"oauth\"}) by (status)",
           "legendFormat": "Status {{status}}",
           "refId": "A"
         }
       ],
-      "title": "Distribuição de Status Codes",
+      "title": "Distribuição Geral de Códigos HTTP",
       "type": "piechart"
-    }
-  ],
-  "refresh": "5s",
-  "schemaVersion": 38,
-  "style": "dark",
-  "tags": [
-    "oauth",
-    "keycloak",
-    "symfony",
-    "pucrs",
-    "security"
-  ],
-  "time": {
-    "from": "now-15m",
-    "to": "now"
-  },
-  "timepicker": {
-    "refresh_intervals": [
-      "5s",
-      "10s",
-      "30s",
-      "1m"
-    ]
-  },
-  "timezone": "browser",
-  "title": "OAuth & Keycloak Microservice — Painel Operacional",
-  "uid": "oauth-microservice-dashboard",
-  "version": 1,
-  "templating": {
-    "list": [
-      {
-        "current": {
-          "selected": true,
-          "text": "Prometheus",
-          "value": "PBFA97CFB590B2093"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 20
+      },
+      "id": 103,
+      "title": "🔒 Segurança Institucional: Autenticação (Keycloak) & Autorização (RBAC)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "description": "Acompanha tentativas de login e renovações de sessão via refresh token contra o Keycloak. Falhas contínuas de login podem indicar tentativas não autorizadas ou ataques de força bruta.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "Operações",
+            "axisPlacement": "auto",
+            "fillOpacity": 20,
+            "gradientMode": "opacity",
+            "lineWidth": 2,
+            "spanNulls": true
+          },
+          "unit": "short"
         },
-        "hide": 0,
-        "includeAll": false,
-        "label": "Data Source",
-        "multi": false,
-        "name": "datasource",
-        "options": [],
-        "query": "prometheus",
-        "refresh": 1,
-        "regex": "",
-        "skipUrlSync": false,
-        "type": "datasource"
-      }
-    ]
-  }
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Logins com Sucesso"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#73BF69",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Falhas de Login (Credenciais Inválidas)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#F2495C",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Sessões Renovadas (/refresh)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#5794F2",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 21
+      },
+      "id": 13,
+      "options": {
+        "legend": {
+          "calcs": [
+            "sum",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "sum(increase(oauth_logins_total{job=\"oauth\", status=\"success\"}[5m])) or vector(0)",
+          "legendFormat": "Logins com Sucesso",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "sum(increase(oauth_logins_total{job=\"oauth\", status=\"failure\"}[5m])) or vector(0)",
+          "legendFormat": "Falhas de Login (Credenciais Inválidas)",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "sum(increase(oauth_token_refreshes_total{job=\"oauth\", status=\"success\"}[5m])) or vector(0)",
+          "legendFormat": "Sessões Renovadas (/refresh)",
+          "refId": "C"
+        }
+      ],
+      "title": "Fluxo de Autenticação (Logins & Tokens)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "description": "Decisões de controle de acesso executadas no endpoint /authorize. Compara acessos permitidos conforme a matriz institucional (papéis administrator, professor, student) versus acessos negados com HTTP 403.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "Decisões RBAC",
+            "axisPlacement": "auto",
+            "fillOpacity": 25,
+            "gradientMode": "opacity",
+            "lineWidth": 2,
+            "spanNulls": true
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Acesso Concedido (Permitido)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#73BF69",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Acesso Negado (403 Forbidden)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FF9830",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 21
+      },
+      "id": 14,
+      "options": {
+        "legend": {
+          "calcs": [
+            "sum",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "sum(increase(oauth_authorizations_total{job=\"oauth\", result=\"granted\"}[5m])) or vector(0)",
+          "legendFormat": "Acesso Concedido (Permitido)",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "sum(increase(oauth_authorizations_total{job=\"oauth\", result=\"denied\"}[5m])) or vector(0)",
+          "legendFormat": "Acesso Negado (403 Forbidden)",
+          "refId": "B"
+        }
+      ],
+      "title": "Decisões de Autorização RBAC (/authorize)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "description": "Visão tabular detalhada com todas as rotas ativas do microserviço, método HTTP e quantidade acumulada de requisições atendidas.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 21
+      },
+      "id": 15,
+      "options": {
+        "footer": {
+          "enablePagination": true,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Total"
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "sum by (method, route) (http_requests_total{job=\"oauth\"})",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "title": "Ranking de Tráfego por Rota",
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 28
+      },
+      "id": 104,
+      "title": "🩺 Conectividade & Saúde dos Componentes (Healthchecks)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "description": "Verificação ativa de conectividade e status HTTP 200 via Blackbox Exporter e Prometheus Scraping. Garante que os containers chave (OAuth API e Keycloak) estão operacionais na malha Docker.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "red",
+                  "index": 0,
+                  "text": "FORA DO AR"
+                },
+                "1": {
+                  "color": "green",
+                  "index": 1,
+                  "text": "OPERACIONAL (200 OK)"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 29
+      },
+      "id": 16,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "probe_success{instance=\"http://oauth:3001/health\"}",
+          "instant": true,
+          "legendFormat": "Microserviço OAuth (/health)",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "up{job=\"oauth\"}",
+          "instant": true,
+          "legendFormat": "Scrape Prometheus (oauth:3001)",
+          "refId": "B"
+        }
+      ],
+      "title": "Status dos Serviços Críticos",
+      "type": "stat"
+    }
+  ]
 }
