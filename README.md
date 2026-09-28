@@ -92,3 +92,23 @@ Todas as respostas de exceção da API seguem uma estrutura JSON uniforme interc
   - `oauth.validations.total`, `oauth.validations.denied.total`
 - **OpenTelemetry**: Rastreamento distribuído via OTLP gRPC/HTTP exporter configurado para o collector.
 - Especificação detalhada: [ESPECIFICACAO_OBSERVABILIDADE.md](./ESPECIFICACAO_OBSERVABILIDADE.md)
+
+---
+
+## 🧪 Testes end to end
+
+A suíte E2E é separada dos testes unitários e usa as instâncias reais do OAuth e do Keycloak. Com o `docker compose` ativo, execute em uma máquina com Maven:
+
+```bash
+mvn verify -Pe2e
+```
+
+No Windows, o script abaixo executa pelo Docker na rede do Compose e evita gravar artefatos Maven no diretório compartilhado:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run-e2e.ps1
+```
+
+Configurações opcionais: `E2E_BASE_URL`, `E2E_KEYCLOAK_URL`, `E2E_REALM`, `E2E_ADMIN_USERNAME` e `E2E_ADMIN_PASSWORD`. Os valores padrão correspondem ao ambiente local documentado do projeto.
+
+O fluxo valida login, erro de autenticação, criação e consulta de usuário e role, atualização cadastral, troca de senha, atribuição e remoção da role, exclusões lógicas e o formato de erro para e-mail inválido. Os registros criados são removidos fisicamente do Keycloak ao final.
