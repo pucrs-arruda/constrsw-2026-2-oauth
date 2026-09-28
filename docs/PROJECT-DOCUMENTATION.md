@@ -83,6 +83,20 @@ AppModule
 
 Cross-cutting, not modules: `main.ts` (bootstrap), `common/` (error envelope + shared HTTP helper), `config/` (env schema).
 
+### NestJS Architectural Pattern
+
+- **Modular monolith, feature-based modules:** each functional area (`AuthModule`, `UsersModule`, `RolesModule`, `KeycloakModule`) is a self-contained Nest `@Module()` bundling its own controller(s) and provider(s). `AppModule` is the composition root: it imports the global `ConfigModule` plus the three feature modules and registers `HealthController` directly on itself (no dedicated `HealthModule`).
+- **Layered Controller → Service → Client pattern**, applied consistently in every feature module:
+  - **Controller** (`@Controller()`): HTTP surface only — route decorators (`@Get`, `@Post`, `@Put`, `@Patch`, `@Delete`), DTO binding (`@Body()`, `@Param()`, `@Query()`), and delegation to its Service. No business logic here.
+  - **Service** (`@Injectable()`): business/orchestration logic (soft-delete rules, role-mapping cleanup, DTO ↔ Keycloak shape mapping). Never calls `fetch` directly — that responsibility is pushed down to a Client.
+  - **Client** (`KeycloakClient`, `KeycloakAdminClient`): the only layer allowed to talk HTTP to Keycloak, isolating the external dependency from business logic.
+- **Dependency Injection through module `providers`/`exports`:** `KeycloakModule` declares `KeycloakAdminClient` as both a provider and an export, so `UsersModule`/`RolesModule` obtain a working, Nest-managed instance simply by adding `KeycloakModule` to their own `imports` array — no manual instantiation anywhere.
+  - Asymmetry worth knowing: `KeycloakClient` is **not** shared the same way — `AuthModule` and `UsersModule` each list it directly in their own `providers` array instead of one exporting it to the other, so each module resolves its **own instance** rather than a shared singleton.
+- **Global cross-cutting concerns wired once in `main.ts`**, not per-module: `ValidationPipe` (global pipe), `ProblemDetailsFilter` (global exception filter, `@Catch()`), `cookie-parser` (global Express middleware), and `ConfigModule.forRoot({ isGlobal: true, validate: validateEnvironment })` (env validated at boot, `ConfigService` injectable anywhere without re-importing `ConfigModule`).
+- **No Guards, Interceptors, or custom parameter Decorators anywhere in `src/`** — a deliberate absence, not an oversight: it's the same "Known Gap" called out below (no `@UseGuards()`-based route authorization). Anything auth-adjacent is handled by hand inside controllers/services rather than Nest's guard/interceptor pipeline.
+- **DTO-driven validation, not hand-rolled checks:** every request body is a `class-validator`-decorated DTO class (`class-transformer` performs the plain-object → class-instance step), enforced globally by the `ValidationPipe({ whitelist: true, transform: true })` — controllers contain no manual `if` validation.
+- **Swagger generated from the same decorators**, not hand-maintained: `SwaggerModule.createDocument()` introspects controllers/DTOs at boot to build the `/docs` UI, independent of the partial `contracts/identity-gateway.yaml`.
+
 ### Request Lifecycle
 
 1. `main.ts` builds the Nest app, applies `cookie-parser()`, a global `ValidationPipe({ whitelist: true, transform: true })`, and the global `ProblemDetailsFilter`.
