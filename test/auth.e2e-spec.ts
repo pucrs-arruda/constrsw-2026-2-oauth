@@ -2,7 +2,7 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
-import { OAuthExceptionFilter } from '../src/common/filters/oauth-exception.filter';
+import { OAuthExceptionFilter } from '../src/presentation/http/filters/oauth-exception.filter';
 
 /**
  * Testes de INTEGRACAO: sobem a aplicacao Nest de verdade (mesmos guards,

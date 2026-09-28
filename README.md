@@ -4,6 +4,126 @@ API REST de autenticacao/autorizacao do T1. Nao guarda nenhum dado propria:
 e um adapter fino sobre a REST API do Keycloak (realm `constrsw`, client
 `oauth`), em **NestJS 11 + TypeScript 6**.
 
+## Stack
+
+| Item | Tecnologia |
+| --- | --- |
+| Framework | NestJS 11 (Express) + TypeScript 6, Node 24 |
+| Validacao | `class-validator` / `class-transformer` (`ValidationPipe` global, `whitelist`) |
+| Cliente HTTP | `@nestjs/axios` (axios + rxjs) |
+| Documentacao | `@nestjs/swagger` (OpenAPI em `/swagger`) |
+| Observabilidade | OpenTelemetry (`sdk-node`, HTTP/Express) + `PrometheusExporter` |
+| Testes | Jest + ts-jest (unitarios), supertest (e2e) |
+| Identity provider | Keycloak 26.0.1 (realm `constrsw`, client `oauth`) |
+| Containers | Docker multi-stage (`node:24-alpine`), Docker Compose |
+
+## Arquitetura
+
+O `oauth` e um **adapter/gateway sem estado e sem banco proprio**: traduz
+chamadas REST simples (JSON / form-data) para a REST API do Keycloak e
+devolve as respostas num formato padronizado. Toda a autenticacao e
+autorizacao "de verdade" fica no Keycloak.
+
+```
+                +---------------------------- docker network ----------------------------+
+                |                                                                        |
+ Cliente  --->  |  oauth (NestJS :3001)  ---- HTTP ---->  Keycloak (:8080, realm constrsw)|
+ (curl/Swagger) |    |                                                                   |
+ :8181          |    +-- /metrics (:9464, OpenTelemetry) <---- scrape ---- Prometheus :9090|
+                +------------------------------------------------------------------------+
+```
+
+Portas externas (definidas no `.env` da raiz): API `8181`, metricas `8381`,
+Keycloak `8081`, Prometheus `9090`.
+
+### Estilo arquitetural
+
+**Layered architecture** com 4 camadas. A dependencia aponta sempre para o
+`domain`:
+
+```
+presentation  ->  application  ->  domain  <-  infrastructure
+```
+
+| Camada | O que tem | Depende de |
+| --- | --- | --- |
+| `domain` | entidades (`User`, `Role`, `TokenSet`), interfaces/ports (`UserRepository`, `RoleRepository`, `AuthGateway`) e `DomainError` — TypeScript puro | nada |
+| `application` | casos de uso (`AuthService`, `UsersService`, `RolesService`) | `domain` |
+| `infrastructure` | adapters do Keycloak que implementam os ports, cliente HTTP, mapeamento de erros, config e telemetria | `domain` |
+| `presentation` | controllers, DTOs (validacao + Swagger), guard, filtro global de excecoes | `application`, `domain` |
+
+A `application` fala apenas com as interfaces do `domain`; quem sabe que o
+provedor e o Keycloak (paths, payloads, `firstName` vs `first-name`) e a
+`infrastructure`. O `InfrastructureModule` liga cada port ao adapter por
+injecao de dependencia (`USER_REPOSITORY`, `ROLE_REPOSITORY`, `AUTH_GATEWAY`).
+
+### Decisoes de arquitetura
+
+1. **Repasse do token do chamador.** As rotas administrativas nao usam token
+   de servico: o `access_token` do usuario logado e repassado como esta para a
+   Admin REST API (por isso os ports recebem `token` como parametro). A
+   autorizacao (RBAC) e inteiramente delegada ao Keycloak — usuario sem role
+   `realm-management` recebe `403` direto do Keycloak, sem logica extra aqui.
+   Apenas `POST /login` usa o client `oauth` (client id + secret, grant `password`).
+2. **Guard so valida a estrutura.** `BearerTokenGuard` responde `400` se o
+   header `Authorization: Bearer <token>` estiver ausente/malformado; a
+   validade do token e verificada pelo Keycloak.
+3. **Erros de dominio, HTTP so na borda.** A `infrastructure` converte erros
+   do Keycloak em `DomainError` (`kind`: BadRequest, Unauthorized,
+   InvalidCredentials, Forbidden, NotFound, Conflict, Unavailable, Upstream).
+   O `OAuthExceptionFilter` (global) traduz `DomainError`, erros do
+   `ValidationPipe` e erros nao tratados no envelope do T1
+   (ver [Formato de erro](#formato-de-erro)). Keycloak fora do ar vira `503`.
+4. **Stateless.** Sem persistencia local; escala horizontalmente sem coordenacao.
+5. **Metricas por pull.** OpenTelemetry expoe `/metrics` numa porta propria
+   (sem `otel-collector`); o Prometheus raspa direto.
+
+### Estrutura de pastas
+
+```
+src/
+  main.ts                          bootstrap (telemetria, pipes, filtro, Swagger)
+  app.module.ts                    modulo raiz
+  domain/
+    entities/                      user, role, token-set
+    repositories/                  ports: user.repository, role.repository, auth.gateway
+    errors/                        domain-error
+  application/
+    application.module.ts
+    auth/ users/ roles/            casos de uso (*.service.ts)
+  infrastructure/
+    infrastructure.module.ts       liga ports -> adapters
+    keycloak/                      keycloak-client.service, keycloak-*.repository,
+                                   keycloak-auth.gateway, keycloak-error.mapper, mappers/
+    config/                        configuration.ts (variaveis de ambiente)
+    telemetry/                     tracing.ts (OpenTelemetry + Prometheus)
+  presentation/http/
+    presentation.module.ts
+    controllers/                   auth, users, roles, user-roles, health
+    dto/                           auth/ users/ roles/ + error-response.dto
+    guards/ decorators/            BearerTokenGuard, @BearerToken()
+    filters/ exceptions/           OAuthExceptionFilter, OAuthApiException
+    validators/                    regex de e-mail (RFC 5322)
+test/                              testes e2e (auth, users, roles, health)
+scripts/smoke-test.sh              percorre todos os endpoints em ordem de dependencia
+infra-local/                       override local (Keycloak Dockerfile, prometheus.yml)
+docs/, SPEC.md                     analise, especificacao do T1 e spec da layered arch
+```
+
+## Configuracao (variaveis de ambiente)
+
+Vem do `.env` da raiz do repo `base` quando roda via compose;
+`.env.example` serve para rodar a API isolada.
+
+| Variavel | Padrao | Descricao |
+| --- | --- | --- |
+| `OAUTH_INTERNAL_API_PORT` (ou `PORT`) | `3001` | porta interna da API |
+| `OAUTH_INTERNAL_METRICS_PORT` | `9464` | porta do `/metrics` |
+| `KEYCLOAK_SERVER_URL` | `http://localhost:8080` | URL base do Keycloak (sem `/auth`) |
+| `KEYCLOAK_REALM` | `constrsw` | realm |
+| `KEYCLOAK_CLIENT_ID` | `oauth` | client usado no login |
+| `KEYCLOAK_CLIENT_SECRET` | — | secret do client |
+
 ## Rodando
 
 **IMPORTANTE**: o `docker-compose.yml`, o `.env` da raiz e o backup do
@@ -112,6 +232,44 @@ que e repassado como esta para a Admin REST API do Keycloak.
    arquivo (`backend/oauth/infra-local/prometheus.yml`), aplicada via
    `docker-compose.override.yml`, sem tocar no arquivo do professor. Ver
    [`infra-local/README.md`](./infra-local/README.md).
+
+## Formato de erro
+
+Todos os erros seguem o envelope do T1:
+
+```json
+{
+  "error_code": "401",
+  "error_description": "invalid_grant: Invalid user credentials",
+  "error_source": "OAuthAPI",
+  "error_stack": [
+    { "error_code": "401", "error_description": "...", "error_source": "Keycloak" }
+  ]
+}
+```
+
+| Status | Quando |
+| --- | --- |
+| `400` | payload invalido ou header `Authorization` ausente/malformado |
+| `401` | credenciais/token invalidos (vindo do Keycloak) |
+| `403` | usuario sem permissao administrativa no Keycloak |
+| `404` / `409` | recurso inexistente / duplicado (repassado do Keycloak) |
+| `503` | Keycloak indisponivel |
+
+## Testes
+
+```bash
+npm test            # unitarios (use cases com ports mockados, adapters Keycloak, guard, filtro)
+npm run test:cov    # com cobertura
+npm run test:e2e    # e2e (precisa do compose de pe: Keycloak + API)
+bash scripts/smoke-test.sh   # smoke test de todos os endpoints (API=http://localhost:8181)
+```
+
+## Observabilidade
+
+- `GET /health` — usado pelo healthcheck do compose.
+- `GET :8381/metrics` — metricas HTTP/Express (OpenTelemetry -> Prometheus).
+- Prometheus em http://localhost:9090/targets (job `auth`).
 
 ## Cheat-sheet de curl
 

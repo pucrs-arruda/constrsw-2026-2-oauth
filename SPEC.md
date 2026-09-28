@@ -22,17 +22,17 @@ Consequência: a autorização "de verdade" é inteiramente delegada ao RBAC do 
 - Um usuário sem permissão administrativa no Keycloak recebe **403** diretamente da Admin API, sem lógica extra no `oauth`.
 - Só `admin@pucrs.br` tem essas roles atribuídas no realm oficial do professor — os demais usuários de teste (`coordinator`, `professor`, `student`) autenticam normalmente mas levam 403 em qualquer rota administrativa.
 
-### 1.2 Módulos
+### 1.2 Camadas e módulos
 
-| Módulo | Responsabilidade |
+Layered architecture (4 camadas): `presentation → application → domain ← infrastructure`. Detalhes em `docs/superpowers/specs/2026-09-28-layered-architecture-design.md`.
+
+| Camada / módulo | Responsabilidade |
 |---|---|
-| `auth` | `POST /login` |
-| `users` | CRUD de usuários |
-| `roles` | CRUD de roles + atribuição/remoção de role em usuário (`UserRolesController`) |
-| `health` | `GET /health`, usado pelo healthcheck do `docker-compose.yml` |
-| `common/keycloak` | `KeycloakClientService` — cliente HTTP fino para a REST API do Keycloak (login via `password grant`, chamadas genéricas à Admin API) |
-| `common/exceptions` + `common/filters` | `OAuthApiException` + `OAuthExceptionFilter` — normalizam qualquer erro (de negócio, de validação do Nest, ou do próprio Keycloak) no formato de erro do T1 |
-| `common/guards` | `BearerTokenGuard` — valida a *presença/formato* do header `Authorization`, não o token em si |
+| `domain` | Entidades (`User`, `Role`, `TokenSet`), ports (`UserRepository`, `RoleRepository`, `AuthGateway`) e `DomainError`. Sem dependências. |
+| `application` | Casos de uso: `AuthService` (`POST /login`), `UsersService` (CRUD de usuários), `RolesService` (CRUD de roles + atribuição/remoção de role em usuário). |
+| `infrastructure/keycloak` | `KeycloakClientService` (cliente HTTP fino: `password grant` e chamadas genéricas à Admin API), adapters que implementam os ports e `keycloak-error.mapper` (erro HTTP do Keycloak → `DomainError`). |
+| `infrastructure/config`, `infrastructure/telemetry` | Configuração por variáveis de ambiente; OpenTelemetry + exporter Prometheus. |
+| `presentation/http` | Controllers (`auth`, `users`, `roles`, `user-roles`, `health`), DTOs, `BearerTokenGuard` (valida *presença/formato* do header, não o token), `OAuthExceptionFilter` + `OAuthApiException` (normalizam qualquer erro no formato do T1). |
 
 ## 2. Autenticação — `POST /login`
 
