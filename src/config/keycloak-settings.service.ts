@@ -54,6 +54,10 @@ export class KeycloakSettingsService {
     return this.service.internalApiPort;
   }
 
+  get internalMetricsPort(): number {
+    return this.service.internalMetricsPort;
+  }
+
   get realmUrl(): string {
     return `${this.serverUrl}/realms/${this.realm}`;
   }

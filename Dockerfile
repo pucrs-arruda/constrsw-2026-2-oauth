@@ -5,6 +5,7 @@ COPY package*.json ./
 RUN npm ci
 COPY nest-cli.json tsconfig.json ./
 COPY src ./src
+RUN npm test -- --ci --forceExit
 RUN npm run build
 
 FROM node:22-alpine AS runtime
@@ -14,4 +15,5 @@ COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=builder /app/dist ./dist
 EXPOSE 3001
+EXPOSE 9464
 CMD ["node", "dist/main"]
