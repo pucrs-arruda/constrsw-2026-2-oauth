@@ -5,6 +5,7 @@ import { collectDefaultMetrics, Histogram, Registry } from "prom-client";
 const KEYCLOAK_OPERATIONS = [
   "login",
   "refresh",
+  "introspect",
   "admin_token",
   "admin_api",
 ] as const;

@@ -127,7 +127,7 @@ Implemented operations: `POST` (create), `GET` (list, `?enabled=` filter), `GET 
 
 Full CRUD plus role-mapping, all realm roles (client roles are explicitly rejected as "not found" — see below):
 
-- `POST /`, `GET /`, `GET /:id`, `PUT /:id`, `PATCH /:id`, `DELETE /:id`, `POST /:id/users/:userId` (assign), `DELETE /:id/users/:userId` (unassign).
+- `POST /`, `GET /`, `GET /:id`, `PUT /:id`, `PATCH /:id`, `DELETE /:id`, `POST /:id/users/:userId` (assign), `DELETE /:id/users/:userId` (unassign). Every route requires the `administrator` realm role (`RealmRoleGuard`).
 - **Soft delete convention:** Keycloak realm roles have no native delete concept the service relies on here, so `RolesService.remove` sets a custom attribute `attributes.deleted = ["true"]` on the role via `PUT /roles-by-id/{id}`, rather than deleting it. `findAll`/`findOne`/`getActiveRole` all filter on this attribute so a "deleted" role disappears from every read path of this API while still physically existing in Keycloak.
 - **Mapping cleanup on delete:** because Keycloak still includes a role in a user's token even after this soft-delete, `remove()` also walks every direct holder of the role (paginated, `HOLDERS_PAGE_SIZE = 100`) and strips the role mapping from each of them, tolerating a `404` (user removed concurrently).
 - **Client-role isolation:** `/roles-by-id/{id}` in Keycloak resolves both realm roles and client roles (e.g. `realm-management`'s `manage-users`). This service only manages realm roles, so `getRoleById` treats any `clientRole: true` result as `NotFoundError` rather than exposing it.
@@ -153,9 +153,9 @@ A single contract, closed by the team in Sprint 0 and enforced by one global fil
 - Anything else (unexpected `Error`, non-`Error` throw) becomes a generic `500` with a fixed description (`GENERIC_DESCRIPTION`) and **no internal detail leaked outside non-production environments** — in `NODE_ENV=production`, `error_stack` is empty for this case; the real cause is only logged server-side (`Logger.error`).
 - Upstream Keycloak failures are preserved as an `error_stack` entry with code `KC-<upstream status>` and a description best-efforted from the Keycloak response body (`errorMessage` / `error_description` / `error` fields, in that order).
 
-### Known Gap (from the README — a real characteristic of the current code, not fixed by this documentation pass)
+### Roles Authorization
 
-> `/roles` currently has **no request-level authorization**: the controller only checks that a bearer token is present, then performs the operation through the shared service account, which holds `manage-realm` on the realm. `/users` instead forwards the caller's token to the Admin API and therefore returns real `401`/`403`.
+All `/roles` routes require the caller's access token to carry the `administrator` realm role. `RealmRoleGuard` (`common/realm-role.guard.ts`) validates the bearer token through the Keycloak introspection endpoint (RFC 7662, via the confidential `oauth` client) and reads `realm_access.roles`: a missing/invalid/expired token yields `401`, and a valid token without `administrator` yields `403`. The token is only used to prove identity/authorization; the operation itself still runs through the shared admin service account.
 
 ---
 
@@ -291,7 +291,7 @@ All routes require `Authorization: Bearer <access_token>`. `400`, `401`, `403`, 
 
 ### Roles — `/roles`
 
-Requires an `Authorization: Bearer` header; the token is only checked for presence/format, and the operation runs with the shared service account. Without service-account credentials every route fails with `503`.
+Requires an `Authorization: Bearer` header whose token carries the `administrator` realm role (`RealmRoleGuard` introspects the token at Keycloak: `401` if absent/invalid, `403` without the role). The operation runs with the shared service account; without service-account credentials every route fails with `503`.
 
 | Method | Path | Body | Success | Failure modes |
 |---|---|---|---|---|
@@ -308,7 +308,7 @@ Requires an `Authorization: Bearer` header; the token is only checked for presen
 
 ### Authentication/Authorization Status
 
-There is **no route-level authorization guard** anywhere in `src/`. `/roles` only checks for a bearer header (the operation uses the service account), while `/users` forwards the caller token to the Admin API (see §2, Known Gap).
+`/roles` is guarded by `RealmRoleGuard`, which requires the `administrator` realm role after introspecting the bearer token at Keycloak (`401` for an absent/invalid token, `403` for a valid token without the role). `/users` forwards the caller token to the Admin API, so its `401`/`403` reflect the caller's realm permissions.
 
 ---
 
@@ -524,7 +524,7 @@ No CI/CD pipeline configuration (`.github/workflows/`, `.gitlab-ci.yml`, etc.) w
 
 ### Pre-Deployment Caveat
 
-`/roles` has no request-level authorization — the bearer token is only checked for presence, then the operation executes with the admin service account's full realm-management privileges. `/users` forwards the caller token to the Admin API and returns real `401`/`403`. Close the roles gap before exposing the service outside the local Compose network.
+`/roles` requires the caller's access token to carry the `administrator` realm role (validated via Keycloak introspection in `RealmRoleGuard`): `401` for an absent/invalid token, `403` for a valid token without the role. The operation itself still runs with the admin service account's realm-management privileges; `/users` forwards the caller token to the Admin API and returns real `401`/`403`.
 
 ---
 
@@ -533,7 +533,7 @@ No CI/CD pipeline configuration (`.github/workflows/`, `.gitlab-ci.yml`, etc.) w
 Properties of the current repository state, not artifacts of this documentation:
 
 1. **Realm name mismatch:** `.env.example` ships `KEYCLOAK_REALM=closed-cras`, while `README.md` and `test/setup-e2e.ts` reference realm `constrsw`. The live `.env` at the repo root drives the running service.
-2. **No request-level authorization on `/roles`** — the bearer token is only checked for presence; `/users` does forward the caller token to the Admin API and returns real `401`/`403`.
+2. **`/roles` authorization:** the bearer token is introspected and must carry the `administrator` realm role; `/users` forwards the caller token to the Admin API and returns real `401`/`403`.
 3. **`contracts/identity-gateway.yaml` is partial** — does not cover the user routes; treat §4 of this document (sourced from the controllers) as authoritative instead.
 
 ---

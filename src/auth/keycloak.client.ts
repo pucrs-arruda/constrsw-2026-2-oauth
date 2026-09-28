@@ -1,10 +1,15 @@
 import { Injectable, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { KeycloakDependencyError } from "../common/errors";
-import { keycloakJson, requestToken } from "../common/keycloak-http";
+import {
+  introspectToken,
+  keycloakJson,
+  requestToken,
+  TokenIntrospection,
+} from "../common/keycloak-http";
 import { KeycloakOperation, MetricsService } from "../metrics/metrics.service";
 
-export type { TokenResponse } from "../common/keycloak-http";
+export type { TokenResponse, TokenIntrospection } from "../common/keycloak-http";
 
 export interface KeycloakUser {
   id: string;
@@ -62,6 +67,21 @@ export class KeycloakClient {
         }),
         this.timeoutMs,
       ),
+    );
+  }
+
+  /**
+   * Valida o access token do chamador no Keycloak (RFC 7662). O `oauth` client
+   * é confidencial, então a chamada leva `client_id`/`client_secret`. Um token
+   * expirado/forjado responde `{ active: false }`, mapeado para 401 pelo guard.
+   */
+  introspect(accessToken: string): Promise<TokenIntrospection> {
+    return this.observe("introspect", () =>
+      introspectToken(this.introspectUrl(), accessToken, {
+        clientId: this.clientId,
+        clientSecret: this.clientSecret,
+        timeoutMs: this.timeoutMs,
+      }),
     );
   }
 
@@ -142,6 +162,13 @@ export class KeycloakClient {
   private tokenUrl(): URL {
     return new URL(
       `/realms/${this.realm}/protocol/openid-connect/token`,
+      this.baseUrl,
+    );
+  }
+
+  private introspectUrl(): URL {
+    return new URL(
+      `/realms/${this.realm}/protocol/openid-connect/token/introspect`,
       this.baseUrl,
     );
   }

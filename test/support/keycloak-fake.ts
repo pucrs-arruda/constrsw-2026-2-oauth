@@ -12,6 +12,8 @@ export interface FakeUser {
   lastName?: string;
   enabled: boolean;
   password?: string;
+  /** Realm roles returned by introspection via `realm_access.roles`. */
+  realmRoles?: string[];
 }
 
 export interface FakeRole {
@@ -54,6 +56,7 @@ const DEFAULT_USERS: FakeUser[] = [
     lastName: "User",
     enabled: true,
     password: "secret",
+    realmRoles: ["administrator", "USER"],
   },
   { id: "u2", username: "two@pucrs.br", enabled: false, password: "secret" },
   { id: "sa", username: "service-account-oauth", enabled: true },
@@ -188,6 +191,28 @@ export function createKeycloakFake(
           });
         }
         return response(400, { error: "unsupported_grant_type" });
+      }
+
+      if (path.endsWith("/protocol/openid-connect/token/introspect")) {
+        const presented = asForm(init?.body).get("token") ?? "";
+        const inactive = () => response(200, { active: false });
+        if (presented === tokens.admin) {
+          return response(200, {
+            active: true,
+            realm_access: { roles: ["administrator"] },
+          });
+        }
+        // Token válido, porém sem o role exigido pelas rotas administrativas.
+        if (presented === tokens.forbidden) {
+          return response(200, { active: true, realm_access: { roles: [] } });
+        }
+        const userId = tokenUsers.get(presented);
+        const user = userId ? users.get(userId) : undefined;
+        if (!user) return inactive();
+        return response(200, {
+          active: true,
+          realm_access: { roles: user.realmRoles ?? [] },
+        });
       }
 
       const forbidden = token === tokens.forbidden;
