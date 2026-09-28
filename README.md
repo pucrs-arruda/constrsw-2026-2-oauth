@@ -567,3 +567,55 @@ The global error filter covers validation, Bearer, Keycloak upstream, and
 unexpected application errors. The caller authorization decision remains
 delegated to the current Bearer/Admin API arrangement and is intentionally
 tracked separately.
+
+## End-to-end tests (`e2e/`)
+
+Black-box suite in bash + `curl` + `jq` that drives a **running** stack — the
+real `oauth` container in front of the real Keycloak with the professor's realm
+import. Nothing is mocked, so it also proves the realm wiring (client roles,
+the openid scope, the B.2 authorization matrix). It complements the Jest unit
+and integration specs, which stay the fast gate in CI.
+
+```bash
+# from the base repo: docker compose up -d keycloak oauth
+npm run test:e2e                      # every suite
+./e2e/run.sh users roles              # only some suites
+BASE_URL=http://localhost:8181 ./e2e/run.sh
+```
+
+Requires `curl` and `jq`. The runner waits for `/health`, logs in the four
+seeded users once, runs the suites and exits `0` (all green), `1` (assertion
+failures) or `2` (stack unavailable / seeded login failed).
+
+| Variable | Default |
+| --- | --- |
+| `BASE_URL` | `http://localhost:8181` |
+| `METRICS_URL` | `http://localhost:8381` (check skipped if unreachable) |
+| `E2E_PASSWORD` | `a12345678` (password of the seeded users) |
+| `E2E_ADMIN_USER`, `E2E_COORDINATOR_USER`, `E2E_PROFESSOR_USER`, `E2E_STUDENT_USER` | `<role>@pucrs.br` |
+| `E2E_WAIT_SECONDS` | `120` |
+
+| Suite | Endpoints and behaviour covered |
+| --- | --- |
+| `health` | `GET /health`, unknown route → OA 404, Prometheus scrape port |
+| `auth` | `POST /login` (urlencoded, multipart, ignored `client_id`/`grant_type`, 400/401 cases, JWT claims), `POST /refresh` |
+| `bearer_guard` | Every protected route → 401 without/with bad token; non-admins → 403 |
+| `users` | `POST/GET/PUT/PATCH/DELETE /users`, `?enabled` filter, validation, password change verified by login, logical delete and re-enable |
+| `roles` | `POST/GET/PUT/PATCH/DELETE /roles`, `POST /users/:id/roles`, `DELETE /users/:id/roles/:roleId` (by id and by name), assignment verified in the user's next token |
+| `authz` | `POST /authz/validate`: full role × resource matrix (4 × 8) plus 400/401 cases |
+
+Every error assertion also checks the uniform OA envelope (`error_source`,
+array-of-objects `error_stack`).
+
+**Seeded coordinator/professor.** The realm import gives `coordinator@` and
+`professor@pucrs.br` only *realm* roles, while the Authorization policies bind
+the *client* roles `oauth/coordinator` and `oauth/professor`, so those seeds are
+denied every resource. The `authz` suite therefore creates fixture users and
+assigns the client role through the API before checking the matrix (`admin` and
+`student` are used as seeded).
+
+**Test data.** Each run creates users named `e2e-<timestamp>@pucrs.br` and
+roles named `e2e-role-<timestamp>`. The API has no hard delete, so users are
+disabled and roles are marked `inactive` when the run ends; they stay in the
+realm and can be purged by resetting the Keycloak volume. E2E is intentionally
+not part of the CI workflow, which has no Keycloak to talk to.
