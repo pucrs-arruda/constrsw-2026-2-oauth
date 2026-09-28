@@ -45,6 +45,10 @@ management:
     distribution:
       percentiles-histogram:
         http.server.requests: true
+        http.client.requests: true
+      # Buckets fixos para o Apdex do Grafana (T = 250ms, tolerável até 1s)
+      slo:
+        http.server.requests: 100ms,250ms,1s
   tracing:
     sampling:
       probability: 1.0
