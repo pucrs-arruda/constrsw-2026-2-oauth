@@ -11,6 +11,179 @@ Membros: Gabriel Hoppe, Juliano Chies, Leonardo Gemin, William Klein
 NestJS 11 + TypeScript, npm. The service is a REST gateway in front of Keycloak
 (realm `constrsw`, client `oauth`).
 
+## Architecture
+
+**Layered architecture** inside an **identity API Gateway**, running as one
+service of a **microservices** system.
+
+Three levels, from the outside in.
+
+### 1. System level — microservices
+
+The `base` repository composes twelve independent services as git submodules,
+each with its own repository, lifecycle and container, talking over HTTP/REST.
+`oauth` is one of them.
+
+```mermaid
+flowchart LR
+    Client([Client / Postman])
+    subgraph compose["docker compose — network constrsw"]
+        OAUTH["oauth<br/>identity gateway<br/>:3001"]
+        KC[("Keycloak 26<br/>realm constrsw<br/>:8080")]
+        PROM["Prometheus<br/>scrapes :9464"]
+        OTHER["classes · courses · lessons<br/>professors · rooms · students<br/>reservations · resources"]
+    end
+
+    Client -->|"HTTP :8181"| OAUTH
+    OAUTH -->|"OIDC + Admin REST"| KC
+    PROM -.->|"pull /metrics"| OAUTH
+    OTHER -.->|"validate tokens"| OAUTH
+```
+
+### 2. Service level — API Gateway
+
+`oauth` owns **no database and no business domain**. It receives, validates and
+translates calls to Keycloak, adapting Keycloak's contract to the one the T1
+brief requires: form-data login, HTTP `200`, the `referesh_expires_in` spelling,
+and the uniform OA error envelope.
+
+Keycloak stays the single source of truth for identity and authorization.
+
+### 3. Internal level — layers
+
+Dependencies flow in **one direction only**: presentation → application →
+infrastructure. A controller never opens an HTTP connection; an infrastructure
+client never knows what an HTTP request looks like coming in.
+
+```mermaid
+flowchart TD
+    subgraph P["Presentation — HTTP in"]
+        C1["login.controller<br/>refresh.controller"]
+        C2["users.controller"]
+        C3["roles.controller"]
+        C4["authz.controller"]
+        C5["health.controller"]
+    end
+
+    subgraph A["Application — rules"]
+        S1["KeycloakUsersService"]
+        S2["KeycloakAdminService<br/>(client roles)"]
+    end
+
+    subgraph I["Infrastructure — HTTP out"]
+        I1["KeycloakTokenClient"]
+        I2["KeycloakAdminClient"]
+        I3["KeycloakAuthorizationClient"]
+        I4["KeycloakTokenVerifierService"]
+    end
+
+    subgraph X["Cross-cutting"]
+        G["common/<br/>BearerAuthGuard<br/>AdministratorRoleGuard"]
+        E["errors/<br/>OA envelope + mapper"]
+        CF["config/<br/>settings + URL builder"]
+        T["telemetry/<br/>OpenTelemetry"]
+    end
+
+    KC[("Keycloak")]
+
+    C1 --> I1
+    C2 --> S1
+    C3 --> S2
+    C4 --> I3
+    S1 --> I2
+    S2 --> I2
+    I1 --> KC
+    I2 --> KC
+    I3 --> KC
+    I4 --> KC
+
+    X -.->|"used by every layer"| P
+```
+
+| Layer | Files | Responsibility |
+| --- | --- | --- |
+| **Presentation** | `*.controller.ts` | Routes, input validation, status codes |
+| **Application** | `keycloak-users.service.ts`, `keycloak-admin.service.ts` | Rules: logical delete, representation merge, enabled filter |
+| **Infrastructure** | `keycloak-*.client.ts`, `keycloak-token-verifier.service.ts` | Talking to Keycloak: admin token, timeouts, upstream failures |
+| **Cross-cutting** | `common/`, `errors/`, `config/`, `telemetry/` | Guards, error envelope, settings, metrics |
+
+Only four files in the whole service call `fetch`, and all four are in the
+infrastructure layer — that is what keeps the boundary real rather than
+aspirational.
+
+### Request flow
+
+`GET /users` end to end:
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant G as BearerAuthGuard
+    participant R as AdministratorRoleGuard
+    participant Ctl as UsersController
+    participant S as KeycloakUsersService
+    participant Cli as KeycloakAdminClient
+    participant KC as Keycloak
+
+    C->>G: GET /users + Bearer token
+    G->>KC: UserInfo (is this token valid?)
+    KC-->>G: 200 — caller identity
+    Note over G: decode JWT for client roles<br/>(UserInfo omits them)
+    G->>R: request.user
+    Note over R: administrator role present?
+    R->>Ctl: allowed
+    Ctl->>S: listUsers(enabled = true)
+    S->>Cli: request('/users?enabled=true')
+    Note over Cli: cached admin token<br/>(service credentials, never the caller's)
+    Cli->>KC: Admin REST
+    KC-->>Cli: user list
+    Cli-->>S: response
+    S-->>Ctl: KeycloakUser[]
+    Ctl-->>C: 200 — hyphenated representation
+```
+
+A failure anywhere in that chain is thrown as an `OaException` and formatted by
+the global `OaExceptionFilter`, so every route answers the same envelope.
+
+### Patterns used
+
+**Dependency Injection** (NestJS container) throughout. This is what makes the
+test suite possible: integration tests swap `KeycloakTokenVerifierService` for
+a stub without touching production code.
+
+**Guard chain** — `BearerAuthGuard` answers *who is calling* (`401`), and only
+then `AdministratorRoleGuard` answers *may they* (`403`). Two separate
+questions, two separate guards.
+
+**Shared client** — `KeycloakAdminClient` is injected by both the users and the
+roles modules rather than duplicated, so admin-token caching, timeouts and
+failure mapping exist in exactly one place.
+
+### The central architectural decision
+
+**Authorization is delegated to Keycloak Authorization Services; it is never
+decided locally.** `POST /authz/validate` asks Keycloak through the UMA-ticket
+grant and relays the answer. There is no role-to-resource table in the code,
+and a test pins that absence.
+
+The reason is concrete: the permission matrix in the T1 brief **disagrees** with
+what `constrsw.json` actually configures — the realm's bindings are
+hierarchical, the brief's are disjoint. A table copied into code would have
+shipped that contradiction. Keycloak is the single source of truth.
+
+### What this architecture is not
+
+Worth stating plainly, because the names are close:
+
+- **Not Hexagonal / Ports & Adapters.** There are no abstract ports between
+  layers. `KeycloakUsersService` depends on the concrete `KeycloakAdminClient`,
+  not on an interface.
+- **Not Clean Architecture.** There are no framework-independent domain
+  entities. `user.types.ts` holds DTOs shaped by Keycloak's own contract, and
+  the services import from `@nestjs/common`.
+
+Layered is the honest description of what is here.
+
 ## Environment contract
 
 This service reads its configuration **only from the process environment**,
