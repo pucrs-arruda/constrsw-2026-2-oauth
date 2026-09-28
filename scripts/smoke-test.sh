@@ -8,6 +8,11 @@ ADMIN_USER="${ADMIN_USER:-admin@pucrs.br}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-a12345678}"
 SUFFIX="$(date +%s)-$$"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOG_DIR="$SCRIPT_DIR/logs"
+mkdir -p "$LOG_DIR"
+LOG_FILE="$LOG_DIR/smoke-test-$(date +%Y%m%d-%H%M%S).log"
+
 # Some assert_status calls are captured via $(...) to grab a response body,
 # which forks a subshell — plain counter variables incremented inside would
 # not survive back to the parent. A results file does, since it's a real
@@ -272,8 +277,10 @@ main() {
   echo
   echo "==================== summary ===================="
   echo "PASS: $pass_count  FAIL: $fail_count  SKIP: $skip_count"
+  echo "Log saved to: $LOG_FILE"
 
   [[ "$fail_count" -eq 0 ]]
 }
 
-main "$@"
+main "$@" 2>&1 | tee "$LOG_FILE"
+exit "${PIPESTATUS[0]}"
