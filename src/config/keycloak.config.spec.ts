@@ -2,9 +2,11 @@ import {
   buildAppConfig,
   DEFAULT_CLIENT_ID,
   DEFAULT_INTERNAL_API_PORT,
+  DEFAULT_INTERNAL_METRICS_PORT,
   DEFAULT_REALM,
   MissingEnvironmentVariableError,
   normalizeServerUrl,
+  readInternalMetricsPort,
 } from './keycloak.config';
 
 /** Minimum set the professor's compose injects. */
@@ -83,6 +85,29 @@ describe('buildAppConfig', () => {
       (bad) => {
         expect(() =>
           buildAppConfig(validEnv({ OAUTH_INTERNAL_API_PORT: bad })),
+        ).toThrow(/must be a valid port number/);
+      },
+    );
+
+    it('defaults the internal metrics port to 9464', () => {
+      const { oauth } = buildAppConfig(validEnv());
+
+      expect(oauth.internalMetricsPort).toBe(DEFAULT_INTERNAL_METRICS_PORT);
+      expect(oauth.internalMetricsPort).toBe(9464);
+      expect(readInternalMetricsPort(validEnv())).toBe(9464);
+    });
+
+    it('reads OAUTH_INTERNAL_METRICS_PORT without Keycloak secrets', () => {
+      expect(
+        readInternalMetricsPort({ OAUTH_INTERNAL_METRICS_PORT: '19464' }),
+      ).toBe(19464);
+    });
+
+    it.each(['0', '-1', 'abc', '70000', '9464.5'])(
+      'rejects an invalid metrics port (%p)',
+      (bad) => {
+        expect(() =>
+          readInternalMetricsPort({ OAUTH_INTERNAL_METRICS_PORT: bad }),
         ).toThrow(/must be a valid port number/);
       },
     );

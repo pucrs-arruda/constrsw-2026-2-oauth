@@ -10,6 +10,7 @@ export const OAUTH_CONFIG_KEY = 'oauth';
 export const DEFAULT_REALM = 'constrsw';
 export const DEFAULT_CLIENT_ID = 'oauth';
 export const DEFAULT_INTERNAL_API_PORT = 3001;
+export const DEFAULT_INTERNAL_METRICS_PORT = 9464;
 
 export interface KeycloakSettings {
   /** Normalized: no trailing slash. */
@@ -25,6 +26,8 @@ export interface KeycloakSettings {
 export interface OAuthServiceSettings {
   /** Port this API listens on inside the container. */
   readonly internalApiPort: number;
+  /** Port the Prometheus exporter listens on inside the container. */
+  readonly internalMetricsPort: number;
 }
 
 export interface AppConfig {
@@ -61,6 +64,12 @@ function withDefault(
   fallback: string,
 ): string {
   return env[name]?.trim() || fallback;
+}
+
+export function readInternalMetricsPort(
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  return port(env, 'OAUTH_INTERNAL_METRICS_PORT', DEFAULT_INTERNAL_METRICS_PORT);
 }
 
 function port(
@@ -106,6 +115,7 @@ export function buildAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig 
         'OAUTH_INTERNAL_API_PORT',
         DEFAULT_INTERNAL_API_PORT,
       ),
+      internalMetricsPort: readInternalMetricsPort(env),
     },
   };
 }
