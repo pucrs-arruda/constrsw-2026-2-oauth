@@ -67,7 +67,7 @@ Para derrubar tudo: `docker compose down`. Os dados do Keycloak continuam no vol
 | Métricas da API                 | http://localhost:8381/actuator/prometheus    | formato Prometheus, sem autenticação        |
 | **Grafana**                     | http://localhost:3000                        | dashboard abre direto; edição: `admin` / `a12345678` |
 | **Prometheus**                  | http://localhost:9090                        | `/targets`, `/alerts`, `/graph`             |
-| Keycloak Admin Console          | http://localhost:8081                        | `admin` / `a12345678`                       |
+| Keycloak Admin Console          | http://localhost:8180                        | `admin` / `a12345678`                       |
 | Keycloak health / métricas      | http://localhost:9001/health · `/metrics`    | management interface do Keycloak            |
 
 As portas externas vêm do arquivo `.env` da raiz (seção [13. Configuração](#13-configuração)).
@@ -678,7 +678,7 @@ Variáveis do E2E (os valores padrão servem para rodar do host com a stack loca
 | Variável                   | Padrão                    |
 | -------------------------- | ------------------------- |
 | `E2E_BASE_URL`             | `http://localhost:8181`   |
-| `E2E_KEYCLOAK_URL`         | `http://localhost:8081`   |
+| `E2E_KEYCLOAK_URL`         | `http://localhost:8180`   |
 | `E2E_ADMIN_USER` / `E2E_ADMIN_PASSWORD` | `admin@pucrs.br` / `a12345678` |
 | `E2E_UNPRIVILEGED_USER` / `E2E_UNPRIVILEGED_PASSWORD` | `student@pucrs.br` / `a12345678` |
 | `KEYCLOAK_ADMIN` / `KEYCLOAK_ADMIN_PASSWORD` | `admin` / `a12345678` (admin do realm `master`, usado na limpeza) |
@@ -710,7 +710,7 @@ O `docker-compose.yml` injeta essas variáveis a partir do `.env` da raiz.
 | ----------- | ------- | ------- | ----------------------------------------------------------- |
 | oauth API   | 3001    | 8181    | `OAUTH_INTERNAL_API_PORT` / `OAUTH_EXTERNAL_API_PORT`       |
 | oauth Actuator | 9464 | 8381 (e 8281) | `OAUTH_INTERNAL_METRICS_PORT` / `OAUTH_EXTERNAL_METRICS_PORT` (`OAUTH_EXTERNAL_DEBUG_PORT`) |
-| Keycloak    | 8080    | 8081    | `KEYCLOAK_INTERNAL_API_PORT` / `KEYCLOAK_EXTERNAL_CONSOLE_PORT` |
+| Keycloak    | 8080    | 8180    | `KEYCLOAK_INTERNAL_API_PORT` / `KEYCLOAK_EXTERNAL_CONSOLE_PORT` |
 | Keycloak management | 9001 | 9001 | `KC_HTTP_MANAGEMENT_PORT` / `KEYCLOAK_EXTERNAL_METRICS_PORT` |
 | Prometheus  | 9090    | 9090    | `PROMETHEUS_INTERNAL_PORT` / `PROMETHEUS_EXTERNAL_PORT`     |
 | Grafana     | 3000    | 3000    | `GRAFANA_INTERNAL_PORT` / `GRAFANA_EXTERNAL_PORT`           |
@@ -726,12 +726,12 @@ O `docker-compose.yml` injeta essas variáveis a partir do `.env` da raiz.
 
 ```bash
 cd backend/oauth
-export KEYCLOAK_SERVER_URL=http://localhost:8081
+export KEYCLOAK_SERVER_URL=http://localhost:8180
 export KEYCLOAK_CLIENT_SECRET=wsNXUxaupU9X6jCncsn3rOEy6PDt7oJO   # valor do .env
 mvn spring-boot:run                                             # API em http://localhost:8080
 ```
 
-> Atenção ao *issuer*: tokens obtidos via `localhost:8081` têm `iss=http://localhost:8081/...`,
+> Atenção ao *issuer*: tokens obtidos via `localhost:8180` têm `iss=http://localhost:8180/...`,
 > e tokens obtidos pelo container têm `iss=http://keycloak:8080/...`. A API só aceita tokens
 > cujo `iss` bata com o seu `KEYCLOAK_SERVER_URL`. Por isso, obtenha o token pelo `POST /login`
 > **da mesma instância** da API que você vai chamar.

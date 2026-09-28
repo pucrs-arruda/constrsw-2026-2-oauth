@@ -49,7 +49,7 @@ class OAuthApiE2ETest {
   private static final String E2E_ROLE_PREFIX = "e2e-role-";
 
   private final String apiUrl = config("E2E_BASE_URL", "http://localhost:8181");
-  private final String keycloakUrl = config("E2E_KEYCLOAK_URL", "http://localhost:8081");
+  private final String keycloakUrl = config("E2E_KEYCLOAK_URL", "http://localhost:8180");
   private final String realm = config("KEYCLOAK_REALM", "constrsw");
   private final String adminUser = config("E2E_ADMIN_USER", "admin@pucrs.br");
   private final String adminPassword = config("E2E_ADMIN_PASSWORD", "a12345678");
