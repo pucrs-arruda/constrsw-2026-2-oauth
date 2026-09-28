@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import {
   AppError,
@@ -8,6 +8,7 @@ import {
   NotFoundError,
   ValidationError,
 } from "../common/errors";
+import { KeycloakOperation, MetricsService } from "../metrics/metrics.service";
 
 export type AdminMethod = "GET" | "POST" | "PUT" | "DELETE";
 
@@ -43,7 +44,10 @@ export class KeycloakAdminClient {
   private readonly clientId: string;
   private readonly clientSecret: string;
 
-  constructor(private readonly config: ConfigService) {
+  constructor(
+    private readonly config: ConfigService,
+    @Optional() private readonly metrics?: MetricsService,
+  ) {
     this.baseUrl = this.config
       .getOrThrow<string>("KEYCLOAK_URL")
       .replace(/\/+$/, "");
@@ -106,6 +110,7 @@ export class KeycloakAdminClient {
           client_secret: this.clientSecret,
         }),
       },
+      "admin_token",
     );
 
     if (!response.ok) {
@@ -144,11 +149,15 @@ export class KeycloakAdminClient {
     };
     if (body !== undefined) headers["content-type"] = "application/json";
 
-    return this.exchange(this.url(`/admin/realms/${this.realm}${path}`), {
-      method,
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
+    return this.exchange(
+      this.url(`/admin/realms/${this.realm}${path}`),
+      {
+        method,
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body),
+      },
+      "admin_api",
+    );
   }
 
   /**
@@ -163,19 +172,27 @@ export class KeycloakAdminClient {
    * O deadline cobre também a leitura do corpo: um upstream que manda headers e
    * trava o stream não pode prender a requisição para sempre.
    */
-  private async exchange(url: URL, init: RequestInit): Promise<RawResponse> {
+  private async exchange(
+    url: URL,
+    init: RequestInit,
+    operation: KeycloakOperation,
+  ): Promise<RawResponse> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    const endTimer = this.metrics?.keycloakRequests.startTimer({ operation });
     try {
       const response = await fetch(url, { ...init, signal: controller.signal });
-      return {
+      const raw = {
         ok: response.ok,
         status: response.status,
         headers: response.headers,
         body: await this.readBody(response),
       };
+      endTimer?.({ result: raw.ok ? "ok" : "rejected" });
+      return raw;
     } catch (error) {
       if (error instanceof AppError) throw error;
+      endTimer?.({ result: "unavailable" });
       throw new KeycloakError("O provedor de identidade está indisponível.", {
         status: 503,
         source: "keycloak-admin",

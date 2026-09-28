@@ -106,8 +106,11 @@ As falhas do provedor são normalizadas no envelope de quatro chaves, sem vazar 
 | POST   | `/{id}/users/{userId}`    | Atribui o role a um usuário. → `204`         |
 | DELETE | `/{id}/users/{userId}`    | Remove a atribuição. → `204`                 |
 
-As rotas de roles e de escrita de usuários exigem as credenciais do service account
-administrativo (`KEYCLOAK_ADMIN_CLIENT_ID` / `KEYCLOAK_ADMIN_CLIENT_SECRET`, via
+As rotas de roles exigem um access token do chamador com o realm role
+`administrator`: o token é validado por introspecção no Keycloak (`RealmRoleGuard`)
+e devolve `401` sem token válido ou `403` para um token válido sem o role. A
+operação em si usa as credenciais do service account administrativo
+(`KEYCLOAK_ADMIN_CLIENT_ID` / `KEYCLOAK_ADMIN_CLIENT_SECRET`, via
 `grant_type=client_credentials`); sem elas o serviço não consegue token de admin e
 responde `503`.
 
@@ -201,11 +204,18 @@ npm run test:e2e    # integração: sobe a app Nest e simula o Keycloak (não pr
 npm run build       # compila/verifica tipos
 ```
 
+> `npm run test:e2e` é **hermético**: sobe a app em memória (supertest), troca o
+> Keycloak por um mock e usa um registry `prom-client` descartável por caso. As
+> requisições do teste **não** aparecem no Prometheus nem no Grafana. Para gerar
+> volume nos dashboards, use `./scripts/load.sh` na raiz do repositório (ver
+> [README raiz](../../README.md#generating-load-for-the-dashboards)).
+
 ## Teste rápido
 
-Com o stack no ar, as rotas de roles exigem um `Authorization: Bearer <token>`
-(obtenha um token via `POST /login`; o serviço usa a service account
-`oauth-admin` internamente para falar com a Admin API):
+Com o stack no ar, as rotas de roles exigem um `Authorization: Bearer <token>` de
+um usuário com o realm role `administrator` (use `admin@pucrs.br`); tokens sem esse
+role recebem `403`. O serviço usa a service account `oauth-admin` internamente para
+falar com a Admin API:
 
 ```bash
 BASE=http://localhost:8181

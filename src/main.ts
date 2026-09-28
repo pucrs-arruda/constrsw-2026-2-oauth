@@ -18,6 +18,8 @@ async function bootstrap() {
     .setDescription("Gateway autocontido de identidade institucional")
     .setVersion("0.1.0")
     .addCookieAuth(config.getOrThrow<string>("SESSION_COOKIE_NAME"))
+    // Esquema "bearer" referenciado pelo @ApiBearerAuth() de /users e /roles.
+    .addBearerAuth()
     .build();
   SwaggerModule.setup(
     "docs",

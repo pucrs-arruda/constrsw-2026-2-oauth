@@ -54,6 +54,56 @@ export async function requestToken(
   }
 }
 
+/** Resposta (parcial) do endpoint de introspecção do Keycloak. */
+export interface TokenIntrospection {
+  active: boolean;
+  realm_access?: { roles?: string[] };
+}
+
+export interface IntrospectOptions {
+  clientId: string;
+  clientSecret: string;
+  timeoutMs: number;
+}
+
+/**
+ * Valida um access token contra o endpoint RFC 7662 do Keycloak. Diferente de
+ * decodificar o JWT localmente, o Keycloak confere assinatura e expiração e
+ * devolve `active`, além de `realm_access.roles`. Token inválido/expirado vem
+ * como `{ active: false }` (não é erro de dependência).
+ */
+export async function introspectToken(
+  url: URL,
+  token: string,
+  options: IntrospectOptions,
+): Promise<TokenIntrospection> {
+  const { clientId, clientSecret, timeoutMs } = options;
+  try {
+    return await withTimeout(timeoutMs, async (signal) => {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: clientId,
+          client_secret: clientSecret,
+          token,
+        }),
+        signal,
+      });
+      if (!response.ok) {
+        throw new KeycloakDependencyError("upstream_rejected", response.status);
+      }
+      const payload = (await response.json().catch(() => ({}))) as Partial<
+        TokenIntrospection
+      >;
+      return { ...payload, active: payload.active === true };
+    });
+  } catch (error) {
+    if (error instanceof KeycloakDependencyError) throw error;
+    throw new KeycloakDependencyError("unavailable");
+  }
+}
+
 export interface KeycloakJsonOptions {
   method?: string;
   token?: string;

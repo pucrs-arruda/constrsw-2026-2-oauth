@@ -571,6 +571,31 @@ describe("Identity gateway — fluxo completo (e2e)", () => {
       await request(server()).post("/roles").send({ name: "x" }).expect(401);
     });
 
+    it("recusa um token válido sem o papel administrator com 403", async () => {
+      await request(server())
+        .get("/roles")
+        .set(auth(keycloak.tokens.forbidden))
+        .expect(403)
+        .expect((res) => expect(res.body.error_code).toBe("OA-403"));
+      await request(server())
+        .post("/roles")
+        .set(auth(keycloak.tokens.forbidden))
+        .send({ name: "x" })
+        .expect(403);
+      await request(server())
+        .post("/roles/role-1/users/u1")
+        .set(auth(keycloak.tokens.forbidden))
+        .expect(403);
+    });
+
+    it("recusa um token inválido com 401", async () => {
+      await request(server())
+        .get("/roles")
+        .set(auth("not-a-real-token"))
+        .expect(401)
+        .expect((res) => expect(res.body.error_code).toBe("OA-401"));
+    });
+
     it("não expõe client roles do realm", async () => {
       keycloak.roles.set("client-1", {
         id: "client-1",
