@@ -76,4 +76,31 @@ describe('KeycloakAuthorizationClient', () => {
       OaException,
     );
   });
+
+  it('tolerates a non-JSON body on an unexpected status', async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: async () => {
+        throw new Error('not json');
+      },
+    } as unknown as Response);
+
+    await expect(client.checkPermission('token', 'classes')).rejects.toBeInstanceOf(
+      OaException,
+    );
+  });
+
+  it('falls back to a generic description when the body is not a record', async () => {
+    fetchMock.mockResolvedValue(response(500, null));
+
+    let error: OaException | undefined;
+    try {
+      await client.checkPermission('token', 'classes');
+    } catch (e) {
+      error = e as OaException;
+    }
+
+    expect(error?.toEnvelope().error_description).toMatch(/unexpected status/);
+  });
 });

@@ -4,6 +4,7 @@ import {
   DEFAULT_INTERNAL_API_PORT,
   DEFAULT_INTERNAL_METRICS_PORT,
   DEFAULT_REALM,
+  keycloakConfig,
   MissingEnvironmentVariableError,
   normalizeServerUrl,
   readInternalMetricsPort,
@@ -132,6 +133,23 @@ describe('buildAppConfig', () => {
       expect(keycloak.adminUser).toBeUndefined();
       expect(keycloak.adminPassword).toBeUndefined();
     });
+  });
+});
+
+describe('keycloakConfig', () => {
+  it('reads settings from process.env by default', () => {
+    const previous = process.env;
+    process.env = {
+      ...previous,
+      KEYCLOAK_SERVER_URL: 'http://keycloak:8080',
+      KEYCLOAK_CLIENT_SECRET: 'test-secret-not-a-real-one',
+    };
+    try {
+      const { keycloak } = keycloakConfig();
+      expect(keycloak.serverUrl).toBe('http://keycloak:8080');
+    } finally {
+      process.env = previous;
+    }
   });
 });
 

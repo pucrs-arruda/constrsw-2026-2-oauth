@@ -48,6 +48,7 @@ describe('KeycloakSettingsService', () => {
       expect(service.realm).toBe('constrsw');
       expect(service.clientId).toBe('oauth');
       expect(service.internalApiPort).toBe(3001);
+      expect(service.internalMetricsPort).toBe(9464);
     });
 
     it('builds the token URL without inserting /auth', () => {

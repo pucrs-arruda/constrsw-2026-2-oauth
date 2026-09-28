@@ -133,6 +133,43 @@ describe('KeycloakTokenClient', () => {
     });
   });
 
+  describe('malformed upstream responses', () => {
+    it('tolerates a body that is not valid JSON on failure', async () => {
+      fetchMock.mockResolvedValue({
+        ok: false,
+        status: 500,
+        json: async () => {
+          throw new Error('not json');
+        },
+      } as unknown as Response);
+
+      let error: OaException | undefined;
+      try {
+        await client.passwordGrant('a@b.com', 'pw');
+      } catch (e) {
+        error = e as OaException;
+      }
+
+      expect(error).toBeInstanceOf(OaException);
+      expect(error?.getStatus()).toBe(401);
+    });
+
+    it('treats a non-object JSON body (e.g. null) as an incomplete token response', async () => {
+      fetchMock.mockResolvedValue(jsonResponse(200, null));
+
+      let error: OaException | undefined;
+      try {
+        await client.passwordGrant('a@b.com', 'pw');
+      } catch (e) {
+        error = e as OaException;
+      }
+
+      expect(error).toBeInstanceOf(OaException);
+      expect(error?.getStatus()).toBe(401);
+      expect(error?.toEnvelope().error_stack[0]).toMatchObject({ raw: null });
+    });
+  });
+
   describe('refreshGrant', () => {
     it('posts grant_type=refresh_token with the server client credentials and the given refresh token', async () => {
       fetchMock.mockResolvedValue(

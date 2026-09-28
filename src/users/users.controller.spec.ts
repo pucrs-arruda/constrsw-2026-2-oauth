@@ -115,6 +115,15 @@ describe('UsersController', () => {
       expect(error.getStatus()).toBe(400);
       expect(users.createUser).not.toHaveBeenCalled();
     });
+
+    it('rejects a non-string first-name', async () => {
+      const error = await rejection(
+        controller.create({ ...valid, 'first-name': 42 } as never),
+      );
+
+      expect(error.getStatus()).toBe(400);
+      expect(users.createUser).not.toHaveBeenCalled();
+    });
   });
 
   describe('GET /users', () => {
@@ -205,6 +214,13 @@ describe('UsersController', () => {
       );
 
       expect(error.getStatus()).toBe(400);
+    });
+
+    it('refuses a non-object body', async () => {
+      const error = await rejection(controller.update(USER_ID, null as never));
+
+      expect(error.getStatus()).toBe(400);
+      expect(users.updateUser).not.toHaveBeenCalled();
     });
   });
 
