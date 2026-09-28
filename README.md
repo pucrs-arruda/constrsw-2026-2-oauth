@@ -1,114 +1,201 @@
-# 🔐 Serviço OAuth - Keycloak Gateway API (ConstrSW 2026/2)
+# OAuth API
 
-Microsserviço Spring Boot 3 (Java 21) responsável pelo gerenciamento de identidade, autenticação, emissão e validação de tokens JWT (via Keycloak), autorização baseada em cargos (Role-Based Access Control - RBAC) e administração centralizada de Usuários e Roles da plataforma acadêmica.
+The OAuth API is the authentication and identity management service for the Construction Software project. It exposes application-oriented endpoints for login, users, realm roles, role assignments, and authorization checks while using Keycloak as the identity provider and source of truth.
 
----
+The service is implemented with Java 21 and Spring Boot. It does not maintain a local user or role database.
 
-## 🚀 Como Executar com Docker Compose
+## Architecture
 
-A aplicação foi projetada para execução 100% conteinerizada, subindo automaticamente com o Keycloak provisionado e integrado:
-
-```bash
-# Na raiz do repositório:
-docker compose up -d --build
+```mermaid
+flowchart LR
+    Client[API client] --> Controllers[Spring REST controllers]
+    Controllers --> Service[KeycloakService]
+    Service --> Token[Keycloak token endpoint]
+    Service --> Introspection[Keycloak introspection endpoint]
+    Service --> Admin[Keycloak Admin REST API]
+    Controllers --> Errors[GlobalExceptionHandler]
+    Controllers --> Metrics[Micrometer MeterRegistry]
+    Metrics --> Actuator[Spring Boot Actuator]
+    Actuator --> Prometheus[Prometheus]
+    Controllers --> Tracing[Micrometer Tracing]
+    Tracing --> OTLP[OTLP collector]
 ```
 
-### Portas e Serviços
-| Serviço | Porta Host | Protocolo / Descrição |
-|---|---|---|
-| **OAuth Gateway API** | `8181` | REST API, Login e Administração |
-| **Swagger UI (OpenAPI 3)** | `8181` | `http://localhost:8181/swagger-ui.html` |
-| **Métricas Prometheus** | `8381` | `http://localhost:8381/actuator/prometheus` |
-| **Health Check Ativo** | `8181` / `8381` | `GET /health` e `GET /actuator/health` |
-| **Keycloak Console** | `8081` | `http://localhost:8081` (Admin: `admin` / `a12345678`) |
+### Main components
 
----
+| Component | Responsibility |
+| --- | --- |
+| `AuthController` | Login, token validation, health, and resource authorization endpoints. |
+| `UserController` | User creation, retrieval, update, password change, logical deletion, and realm-role mappings. |
+| `RoleController` | Realm-role creation, retrieval, update, patch, and logical deletion. |
+| `KeycloakService` | Calls Keycloak token, token introspection, and Admin REST endpoints. |
+| `GlobalExceptionHandler` | Converts application and Keycloak failures to the required error document. |
+| Spring Boot Actuator | Exposes health, metrics, and Prometheus endpoints on the management port. |
 
-## 📖 Documentação Interativa da API (Swagger / OpenAPI)
+### Authentication flow
 
-A documentação interativa gerada pela biblioteca **Springdoc OpenAPI 3** está disponível em tempo real quando o container sobe:
+1. A client sends `username` and `password` as form data to `POST /login`.
+2. The API calls the Keycloak token endpoint using the password grant, `client_id`, and `client_secret`.
+3. The API returns the token fields required by the assignment contract.
 
-- **Swagger UI**: [http://localhost:8181/swagger-ui.html](http://localhost:8181/swagger-ui.html) (ou `/swagger-ui/index.html`)
-- **OpenAPI JSON Spec**: [http://localhost:8181/v3/api-docs](http://localhost:8181/v3/api-docs)
+### Protected endpoint flow
 
----
+1. The client sends `Authorization: Bearer {access_token}`.
+2. The API introspects the token in Keycloak and requires `active=true`.
+3. The same caller token is used for Keycloak Admin REST requests.
+4. Keycloak evaluates whether the caller has permission to perform the requested administration operation.
 
-## 📋 Catálogo Completo de Endpoints
+### Authorization flow
 
-### 1. Autenticação e Autorização (`/`)
-- `POST /login`: Autentica usuário via Keycloak (`grant_type=password`) e retorna `access_token`, `refresh_token` e `expires_in`.
-- `POST /validate` ou `GET /validate?resource={nome}`: Valida a integridade do token Bearer JWT e permissão para o recurso.
-- `POST /authorize` ou `GET /authorize?resource={nome}`: Verifica autorização com base nas roles do usuário.
-- `GET /health`: Health check simples da API (retorna `"UP"`).
+`/validate` and `/authorize` are aliases. Both accept `GET` with a `resource` query parameter or `POST` with a JSON body, validate the token, and check the roles in the token against the resource matrix maintained by the API:
 
-### 2. Gestão de Usuários (`/users`)
-- `POST /users`: Cria usuário no Keycloak com validação de regex de email. Retorna `201 Created` e cabeçalho `Location: /users/{id}`.
-- `GET /users`: Lista usuários do Realm, com suporte ao filtro `?enabled=true|false`.
-- `GET /users/{id}`: Busca dados detalhados do usuário por ID único.
-- As rotas de usuários e papéis recebem `Authorization: Bearer {access_token}`; a API valida o token e encaminha esse mesmo token à API administrativa do Keycloak, que decide as permissões.
-- `PUT /users/{id}`: Atualiza cadastro do usuário (`firstName`, `lastName`, `email`, `enabled`).
-- `PATCH /users/{id}`: Redefine/atualiza senha do usuário (estrutura `CredentialRepresentation`).
-- `DELETE /users/{id}`: **Deleção lógica** do usuário (obtém dados do usuário, altera `enabled: false` e atualiza no Keycloak).
-- `POST /users/{id}/roles/{roleId}`: Atribui um cargo (Role) a um usuário (Keycloak role-mapping). Retorna `204 No Content`.
-- `DELETE /users/{id}/roles/{roleId}`: Remove um cargo (Role) de um usuário. Retorna `204 No Content`.
+| Role | Resources |
+| --- | --- |
+| `administrator` | `resources`, `rooms`, `professors`, `students` |
+| `coordinator` | `courses`, `classes` |
+| `professor` | `lessons`, `reservations` |
+| `student` | No resource permission configured |
 
-### 3. Gestão de Cargos / Roles (`/roles`)
-- `POST /roles`: Cria um cargo no Keycloak, com suporte a atributo customizado de ativação. Retorna `201 Created` e `Location`.
-- `GET /roles`: Lista todos os cargos do Realm, mapeando o status de ativação.
-- `GET /roles/{id}`: Busca cargo por ID único.
-- `PUT /roles/{id}`: Atualização completa do cargo (`name`, `description`, `enabled`).
-- `PATCH /roles/{id}`: Atualização parcial de campos do cargo.
-- `DELETE /roles/{id}`: **Deleção lógica** de cargo (como o Keycloak não tem flag `enabled` nativa para roles, define `attributes.enabled = ["false"]`). Retorna `204 No Content`.
+Users and realm roles are stored in Keycloak. User deletion is logical and sets `enabled=false`. Role deletion is also logical and sets the custom role attribute `enabled=false`; Keycloak does not provide a native enabled flag for roles. This custom role flag does not remove existing role mappings by itself.
 
----
+## Running with Docker Compose
 
-## 🛡️ Tratamento Global de Erros Padronizado
+From the repository root:
 
-Todas as respostas de exceção da API seguem uma estrutura JSON uniforme interceptada pelo `@RestControllerAdvice`:
+```bash
+docker compose up --build
+```
+
+The local development environment normally exposes:
+
+| Service | URL |
+| --- | --- |
+| OAuth API | `http://localhost:8181` |
+| Swagger UI | `http://localhost:8181/swagger-ui/index.html` |
+| OpenAPI document | `http://localhost:8181/v3/api-docs` |
+| OAuth Actuator and metrics | `http://localhost:8381/actuator` |
+| Prometheus | `http://localhost:9090` |
+| Keycloak | `http://localhost:8081` |
+
+The API port and management port can be changed by the Compose environment. Check the effective mappings with:
+
+```bash
+docker compose ps
+```
+
+## Configuration
+
+| Environment variable | Application default | Purpose |
+| --- | --- | --- |
+| `OAUTH_INTERNAL_API_PORT` | `8081` | HTTP port inside the OAuth container. |
+| `OAUTH_INTERNAL_METRICS_PORT` | `9464` | Actuator management port inside the container. |
+| `KEYCLOAK_SERVER_URL` | `http://localhost:8080` | Keycloak base URL. Compose must use the Keycloak service address. |
+| `KEYCLOAK_REALM` | `constrsw` | Keycloak realm. |
+| `KEYCLOAK_CLIENT_ID` | `oauth` | Confidential client used by the API. |
+| `KEYCLOAK_CLIENT_SECRET` | Development value in `application.yml` | Keycloak client secret. Override it outside local development. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318/v1/traces` | OTLP HTTP trace endpoint. Compose must use the collector service address. |
+
+## API endpoints
+
+### Authentication and authorization
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/login` | Exchanges form-data credentials for Keycloak tokens. |
+| `GET` | `/health` | Lightweight application health response. |
+| `GET`, `POST` | `/validate` | Validates a token and checks access to a resource. |
+| `GET`, `POST` | `/authorize` | Alias for the same token and resource authorization check. |
+
+### Users
+
+All user endpoints require a bearer access token.
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/users` | Creates a user. The returned ID is extracted from Keycloak's `Location` header. |
+| `GET` | `/users` | Lists users; accepts `enabled=true` or `enabled=false`. |
+| `GET` | `/users/{id}` | Retrieves a user by ID. |
+| `PUT` | `/users/{id}` | Updates the supplied user attributes. |
+| `PATCH` | `/users/{id}` | Changes the user's password. |
+| `DELETE` | `/users/{id}` | Logically deletes a user by disabling it. |
+| `POST` | `/users/{id}/roles/{roleId}` | Assigns a realm role to a user. |
+| `DELETE` | `/users/{id}/roles/{roleId}` | Removes a realm-role assignment. |
+
+### Roles
+
+All role endpoints require a bearer access token.
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/roles` | Creates a realm role. |
+| `GET` | `/roles` | Lists realm roles. |
+| `GET` | `/roles/{id}` | Retrieves a realm role by ID. |
+| `PUT` | `/roles/{id}` | Replaces the supplied role attributes. |
+| `PATCH` | `/roles/{id}` | Partially updates a role. |
+| `DELETE` | `/roles/{id}` | Logically deletes a role by setting its custom `enabled` attribute to `false`. |
+
+## Error responses
+
+Errors use the assignment format:
 
 ```json
 {
-  "error_code": "404",
-  "error_description": "Objeto não localizado",
+  "error_code": "OA-000",
+  "error_description": "Error description",
   "error_source": "OAuthAPI",
-  "error_stack": [
-    {
-      "error_code": "404",
-      "error_description": "Objeto não localizado",
-      "error_source": "OAuthAPI"
-    }
-  ]
+  "error_stack": []
 }
 ```
 
----
+When a Keycloak response is the final cause, its HTTP status is propagated through `error_code`, unless a more specific application rule applies.
 
-## 📊 Observabilidade e Monitoramento
+## Contract compatibility notes
 
-- **Prometheus**: Métricas de negócio customizadas expostas em `/actuator/prometheus`:
-  - `oauth.logins.total`
-  - `oauth.users.created.total`, `oauth.users.listed.total`, `oauth.users.updated.total`, `oauth.users.deleted.total`
-  - `oauth.roles.created.total`, `oauth.roles.listed.total`, `oauth.roles.updated.total`, `oauth.roles.deleted.total`
-  - `oauth.validations.total`, `oauth.validations.denied.total`
-- **OpenTelemetry**: Rastreamento distribuído via OTLP gRPC/HTTP exporter configurado para o collector.
-- Especificação detalhada: [ESPECIFICACAO_OBSERVABILIDADE.md](./ESPECIFICACAO_OBSERVABILIDADE.md)
+- The login success response and its OpenAPI schema preserve the assignment spelling `referesh_expires_in`.
+- `POST /login` returns `201 Created`, as required by the assignment, even though token endpoints commonly return `200 OK`.
+- The assignment lists role CRUD and user-role assignment operations without defining their mandatory response bodies or HTTP status codes. Their current behavior is documented by the generated OpenAPI specification and is not presented here as an assignment requirement.
 
----
+## Observability
 
-## 🧪 Testes end to end
+The API exposes health and Prometheus metrics through Spring Boot Actuator on a separate management port and can export traces over OTLP. See [ESPECIFICACAO_OBSERVABILIDADE.md](ESPECIFICACAO_OBSERVABILIDADE.md) for the telemetry architecture, metric inventory, PromQL examples, and verification procedure.
 
-A suíte E2E é separada dos testes unitários e usa as instâncias reais do OAuth e do Keycloak. Com o `docker compose` ativo, execute em uma máquina com Maven:
+Prometheus includes its own expression browser and graph view. Grafana is not included in this service or in its required Compose stack; it may be connected separately if dashboards are needed.
+
+## Tests
+
+Run the regular test suite from this directory:
+
+```bash
+mvn test
+```
+
+Run the end-to-end suite against a live Docker Compose environment:
+
+```powershell
+.\scripts\run-e2e.ps1
+```
+
+The script requires the OAuth and Keycloak Compose services to be running. It builds the test runtime in an isolated Maven container, runs the `e2e` Maven profile, and removes that temporary container when finished. The tests clean up their own Keycloak data. To run the profile manually when all services are already available:
 
 ```bash
 mvn verify -Pe2e
 ```
 
-No Windows, o script abaixo executa pelo Docker na rede do Compose e evita gravar artefatos Maven no diretório compartilhado:
+The end-to-end suite covers invalid login, the user and role lifecycle, role assignment and removal, logical deletion, and invalid email rejection.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run-e2e.ps1
+## Project layout
+
+```text
+src/main/java/br/pucrs/constrsw/oauth/
+  config/       Spring and OpenAPI configuration
+  controller/   HTTP endpoints
+  dto/          API request and response documents
+  exception/    Error model and exception mapping
+  service/      Keycloak REST integration
+src/main/resources/
+  application.yml
+src/test/
+  java/         Unit, integration, and end-to-end tests
+scripts/
+  run-e2e.ps1   Local end-to-end test runner
 ```
-
-Configurações opcionais: `E2E_BASE_URL`, `E2E_KEYCLOAK_URL`, `E2E_REALM`, `E2E_ADMIN_USERNAME` e `E2E_ADMIN_PASSWORD`. Os valores padrão correspondem ao ambiente local documentado do projeto.
-
-O fluxo valida login, erro de autenticação, criação e consulta de usuário e role, atualização cadastral, troca de senha, atribuição e remoção da role, exclusões lógicas e o formato de erro para e-mail inválido. Os registros criados são removidos fisicamente do Keycloak ao final.
