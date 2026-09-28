@@ -12,6 +12,7 @@ import { loginAs } from './utils/login';
 describe('Roles (e2e)', () => {
   let app: INestApplication;
   let adminToken: string;
+  let studentToken: string;
   let studentUserId: string;
   let createdRoleId: string | undefined;
   const roleName = `role-integracao-${Date.now()}`;
@@ -29,6 +30,7 @@ describe('Roles (e2e)', () => {
     await app.init();
 
     adminToken = await loginAs(app, 'admin@pucrs.br', 'a12345678');
+    studentToken = await loginAs(app, 'student@pucrs.br', 'a12345678');
 
     const users = await request(app.getHttpServer())
       .get('/users')
@@ -50,6 +52,36 @@ describe('Roles (e2e)', () => {
         .catch(() => undefined);
     }
     await app.close();
+  });
+
+  it('GET /roles sem header Authorization retorna 400', async () => {
+    const res = await request(app.getHttpServer()).get('/roles');
+    expect(res.status).toBe(400);
+  });
+
+  it('GET /roles com token invalido/malformado retorna 401', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/roles')
+      .set('Authorization', 'Bearer token-invalido-123');
+    expect(res.status).toBe(401);
+  });
+
+  it('POST /roles sem o campo name retorna 400', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/roles')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ description: 'sem nome' });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('POST /roles com token de usuario sem permissao administrativa (student) retorna 403', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/roles')
+      .set('Authorization', `Bearer ${studentToken}`)
+      .send({ name: `role-student-${Date.now()}` });
+
+    expect(res.status).toBe(403);
   });
 
   it('POST /roles cria um role novo', async () => {
@@ -117,6 +149,30 @@ describe('Roles (e2e)', () => {
     expect(res.status).toBe(200);
   });
 
+  it('PATCH /roles/:id com token de usuario sem permissao administrativa (student) retorna 403', async () => {
+    const res = await request(app.getHttpServer())
+      .patch(`/roles/${createdRoleId}`)
+      .set('Authorization', `Bearer ${studentToken}`)
+      .send({ description: 'tentativa nao autorizada' });
+
+    expect(res.status).toBe(403);
+  });
+
+  it('POST /users/:userId/roles/:roleId sem header Authorization retorna 400', async () => {
+    const res = await request(app.getHttpServer()).post(
+      `/users/${studentUserId}/roles/${createdRoleId}`,
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('POST /users/:userId/roles/:roleId com token de usuario sem permissao administrativa (student) retorna 403', async () => {
+    const res = await request(app.getHttpServer())
+      .post(`/users/${studentUserId}/roles/${createdRoleId}`)
+      .set('Authorization', `Bearer ${studentToken}`);
+
+    expect(res.status).toBe(403);
+  });
+
   it('POST /users/:userId/roles/:roleId atribui o role ao usuario', async () => {
     const res = await request(app.getHttpServer())
       .post(`/users/${studentUserId}/roles/${createdRoleId}`)
@@ -147,6 +203,14 @@ describe('Roles (e2e)', () => {
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(204);
+  });
+
+  it('DELETE /roles/:id com token de usuario sem permissao administrativa (student) retorna 403', async () => {
+    const res = await request(app.getHttpServer())
+      .delete(`/roles/${createdRoleId}`)
+      .set('Authorization', `Bearer ${studentToken}`);
+
+    expect(res.status).toBe(403);
   });
 
   it('DELETE /roles/:id exclui o role de fato (nao ha soft-delete para roles)', async () => {
