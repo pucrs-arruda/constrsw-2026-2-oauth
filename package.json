@@ -11,7 +11,10 @@
     "start:prod": "node dist/main",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:cov": "jest --coverage"
+    "test:unit": "jest --testPathIgnorePatterns \"\\.integration\\.spec\\.ts$\"",
+    "test:integration": "jest --testRegex \".*\\.integration\\.spec\\.ts$\"",
+    "test:cov": "jest --coverage",
+    "test:e2e": "bash e2e/run.sh"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
