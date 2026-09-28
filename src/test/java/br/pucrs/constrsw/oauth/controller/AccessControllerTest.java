@@ -25,29 +25,29 @@ class AccessControllerTest {
 
     @Test
     void returnsOkWhenKeycloakGrantsAccess() throws Exception {
-        when(accessService.hasAccess("Bearer token", "/courses")).thenReturn(true);
+        when(accessService.hasAccess("Bearer token", "/lessons")).thenReturn(true);
 
         mockMvc.perform(get("/access")
                         .header("Authorization", "Bearer token")
-                        .param("resource", "/courses"))
+                        .param("resource", "/lessons"))
                 .andExpect(status().isOk());
 
-        verify(accessService).hasAccess("Bearer token", "/courses");
+        verify(accessService).hasAccess("Bearer token", "/lessons");
     }
 
     @Test
     void returnsForbiddenWhenKeycloakDeniesAccess() throws Exception {
-        when(accessService.hasAccess("Bearer token", "/courses")).thenReturn(false);
+        when(accessService.hasAccess("Bearer token", "/lessons")).thenReturn(false);
 
         mockMvc.perform(get("/access")
                         .header("Authorization", "Bearer token")
-                        .param("resource", "/courses"))
+                        .param("resource", "/lessons"))
                 .andExpect(status().isForbidden());
     }
 
     @Test
     void returnsUnauthorizedWithoutBearerToken() throws Exception {
-        mockMvc.perform(get("/access").param("resource", "/courses"))
+        mockMvc.perform(get("/access").param("resource", "/lessons"))
                 .andExpect(status().isUnauthorized());
 
         verifyNoInteractions(accessService);

@@ -77,14 +77,14 @@ class OAuthApiE2ETest {
 
     @Test
     void evaluatesResourceAccessThroughTheRunningHttpServer() {
-        when(keycloakClient.hasAccess(AUTHORIZATION, "/courses")).thenReturn(true);
+        when(keycloakClient.hasAccess(AUTHORIZATION, "/lessons")).thenReturn(true);
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth("e2e-test-token");
 
         ResponseEntity<Void> response = restTemplate.exchange(
-                "/access?resource=/courses", HttpMethod.GET, new HttpEntity<>(headers), Void.class);
+                "/access?resource=/lessons", HttpMethod.GET, new HttpEntity<>(headers), Void.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        verify(keycloakClient).hasAccess(AUTHORIZATION, "/courses");
+        verify(keycloakClient).hasAccess(AUTHORIZATION, "/lessons");
     }
 }
