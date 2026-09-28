@@ -1,9 +1,11 @@
 package br.pucrs.constrsw.oauth.config;
 
 import br.pucrs.constrsw.oauth.port.AuthenticationGateway;
+import br.pucrs.constrsw.oauth.port.AuthorizationGateway;
 import br.pucrs.constrsw.oauth.port.RoleGateway;
 import br.pucrs.constrsw.oauth.port.RoleMappingGateway;
 import br.pucrs.constrsw.oauth.port.UserGateway;
+import br.pucrs.constrsw.oauth.service.AccessService;
 import br.pucrs.constrsw.oauth.service.LoginService;
 import br.pucrs.constrsw.oauth.service.RoleMappingService;
 import br.pucrs.constrsw.oauth.service.RoleService;
@@ -17,6 +19,11 @@ public class UseCaseConfig {
     @Bean
     LoginService loginService(AuthenticationGateway authenticationGateway) {
         return new LoginService(authenticationGateway);
+    }
+
+    @Bean
+    AccessService accessService(AuthorizationGateway authorizationGateway) {
+        return new AccessService(authorizationGateway);
     }
 
     @Bean

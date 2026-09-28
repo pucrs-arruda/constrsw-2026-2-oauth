@@ -21,4 +21,11 @@ public class LoginService {
         }
         return authenticationGateway.authenticate(username, password);
     }
+
+    public AuthTokens refresh(String refreshToken) {
+        if (refreshToken == null || refreshToken.isBlank()) {
+            throw new InvalidLoginRequestException("Refresh token is required");
+        }
+        return authenticationGateway.refresh(refreshToken);
+    }
 }

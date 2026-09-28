@@ -35,8 +35,8 @@ public class GlobalExceptionHandler {
         return error(HttpStatus.BAD_REQUEST, exception.getMessage(), Collections.emptyList());
     }
 
-    @ExceptionHandler(InvalidCredentialsException.class)
-    ResponseEntity<ApiErrorResponse> handleInvalidCredentials(InvalidCredentialsException exception) {
+    @ExceptionHandler({InvalidCredentialsException.class, InvalidRefreshTokenException.class})
+    ResponseEntity<ApiErrorResponse> handleInvalidAuthentication(RuntimeException exception) {
         return error(HttpStatus.UNAUTHORIZED, exception.getMessage(), Collections.emptyList());
     }
 

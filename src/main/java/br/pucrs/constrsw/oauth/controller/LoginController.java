@@ -46,4 +46,24 @@ public class LoginController {
                 tokens.refreshToken(), tokens.refreshExpiresIn());
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
+
+    @Operation(summary = "Refresh tokens", description = "Issues new access and refresh tokens through Keycloak")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Tokens refreshed"),
+            @ApiResponse(responseCode = "400", description = "Invalid request",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Invalid or expired refresh token",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "502", description = "Identity provider failure",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    @PostMapping(path = "/refresh", consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<LoginResponse> refresh(
+            @RequestPart(value = "refresh_token", required = false) String refreshToken) {
+        AuthTokens tokens = loginService.refresh(refreshToken);
+        LoginResponse response = new LoginResponse(tokens.tokenType(), tokens.accessToken(), tokens.expiresIn(),
+                tokens.refreshToken(), tokens.refreshExpiresIn());
+        return ResponseEntity.ok(response);
+    }
 }
