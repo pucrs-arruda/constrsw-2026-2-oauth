@@ -23,5 +23,14 @@
       "jest"
     ],
     "esModuleInterop": true
-  }
+  },
+  "include": [
+    "src/**/*.ts"
+  ],
+  "exclude": [
+    "./test",
+    "./test/**/*.ts",
+    "./**/test/**",
+    "./**/*.e2e-spec.ts"
+  ]
 }
