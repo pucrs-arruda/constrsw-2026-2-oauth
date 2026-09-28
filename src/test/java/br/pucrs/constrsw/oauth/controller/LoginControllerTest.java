@@ -1,9 +1,10 @@
 package br.pucrs.constrsw.oauth.controller;
 
 import br.pucrs.constrsw.oauth.domain.AuthTokens;
-import br.pucrs.constrsw.oauth.error.GlobalExceptionHandler;
 import br.pucrs.constrsw.oauth.error.InvalidCredentialsException;
 import br.pucrs.constrsw.oauth.domain.InvalidLoginRequestException;
+import br.pucrs.constrsw.oauth.error.GlobalExceptionHandler;
+import br.pucrs.constrsw.oauth.error.InvalidRefreshTokenException;
 import br.pucrs.constrsw.oauth.service.LoginService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -81,6 +82,28 @@ class LoginControllerTest {
                 .andExpect(jsonPath("$.error_code").value("400"));
 
         verifyNoInteractions(loginService);
+    }
+
+    @Test
+    void returnsOkWithNewTokensWhenRefreshSucceeds() throws Exception {
+        AuthTokens response = new AuthTokens("Bearer", "new-access", 300, "new-refresh", 1800);
+        when(loginService.refresh("old-refresh")).thenReturn(response);
+
+        mockMvc.perform(multipart("/refresh").part(textPart("refresh_token", "old-refresh")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.access_token").value("new-access"))
+                .andExpect(jsonPath("$.refresh_token").value("new-refresh"));
+    }
+
+    @Test
+    void returnsUnauthorizedWhenRefreshTokenIsExpired() throws Exception {
+        when(loginService.refresh("expired-refresh"))
+                .thenThrow(new InvalidRefreshTokenException());
+
+        mockMvc.perform(multipart("/refresh").part(textPart("refresh_token", "expired-refresh")))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error_code").value("401"))
+                .andExpect(jsonPath("$.error_description").value("Invalid or expired refresh token"));
     }
 
     private MockPart textPart(String name, String value) {
