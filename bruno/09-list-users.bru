@@ -14,6 +14,19 @@ headers {
   Authorization: Bearer {{access_token}}
 }
 
+script:post-response {
+  if (res.getStatus() === 200) {
+    const users = res.getBody();
+    if (Array.isArray(users)) {
+      const pessoa4 = users.find(function (u) { return u.username === "pessoa4.user@example.com"; });
+      if (pessoa4) {
+        bru.setVar("user_id", pessoa4.id);
+        bru.setEnvVar("user_id", pessoa4.id);
+      }
+    }
+  }
+}
+
 tests {
   test("lista usuarios sem expor senha", function () {
     const body = res.getBody();

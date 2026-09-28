@@ -19,6 +19,6 @@ tests {
     const body = res.getBody();
 
     expect(res.getStatus()).to.equal(200);
-    expect(body.id).to.equal(bru.getVar("role_id"));
+    expect(body.id).to.equal(bru.getVar("role_id") || bru.getEnvVar("role_id"));
   });
 }

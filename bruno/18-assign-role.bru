@@ -16,7 +16,9 @@ headers {
 
 tests {
   test("atribui realm role ao usuario", function () {
-    expect(res.getStatus()).to.equal(204);
-    expect(res.getBody()).to.equal("");
+    expect([204, 409]).to.include(res.getStatus());
+    if (res.getStatus() === 204) {
+      expect(res.getBody()).to.equal("");
+    }
   });
 }

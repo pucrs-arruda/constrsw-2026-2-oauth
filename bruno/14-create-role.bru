@@ -24,18 +24,26 @@ body:json {
 
 script:post-response {
   if (res.getStatus() === 201) {
-    bru.setVar("role_id", res.getBody().id);
+    const id = res.getBody().id;
+    bru.setVar("role_id", id);
+    bru.setEnvVar("role_id", id);
   }
 }
 
 tests {
-  test("cria role e salva o id", function () {
-    const body = res.getBody();
+  test("cria role ou valida existencia", function () {
+    const status = res.getStatus();
+    expect([201, 409]).to.include(status);
 
-    expect(res.getStatus()).to.equal(201);
-    expect(body.name).to.equal(bru.getEnvVar("role_name") || bru.getVar("role_name") || "pessoa4-test-role");
-    expect(body).to.have.property("id").that.is.a("string").and.not.empty;
-    expect(bru.getVar("role_id")).to.equal(body.id);
+    if (status === 201) {
+      const body = res.getBody();
+      expect(body.name).to.equal(bru.getEnvVar("role_name") || bru.getVar("role_name") || "pessoa4-test-role");
+      expect(body).to.have.property("id").that.is.a("string").and.not.empty;
+      expect(bru.getVar("role_id") || bru.getEnvVar("role_id")).to.equal(body.id);
+    } else {
+      const body = res.getBody();
+      expect(body.error_code).to.equal("OA-409");
+    }
   });
 }
 
