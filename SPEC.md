@@ -134,10 +134,12 @@ Regra de guarda importante: `Authorization` ausente ou mal formado → **400** (
 `src/common/telemetry/tracing.ts` inicializa o OpenTelemetry Node SDK **antes** de qualquer outro módulo ser importado (é o primeiro `import` de `main.ts` — obrigatório, é assim que a instrumentação de `http`/`express` consegue interceptar os módulos antes deles serem exigidos pelo resto da aplicação).
 
 - **`HttpInstrumentation` + `ExpressInstrumentation`**: geram automaticamente o histograma `http_server_request_duration` (contagem + latência) para toda rota da API, sem precisar instrumentar cada controller na mão.
-- **`PrometheusExporter`**: expõe essas métricas em `GET /metrics` (formato OpenMetrics), na porta `OAUTH_INTERNAL_METRICS_PORT` (padrão `9464`) — **servidor HTTP separado** do `main.ts` (`OAUTH_INTERNAL_API_PORT`/3001), scrapeado diretamente pelo Prometheus central (`infrastructure/dev.local/services/prometheus/prometheus.yml`, job `auth` → target `oauth:9464`).
+- **`PrometheusExporter`**: expõe essas métricas em `GET /metrics` (formato OpenMetrics), na porta `OAUTH_INTERNAL_METRICS_PORT` (padrão `9464`) — **servidor HTTP separado** do `main.ts` (`OAUTH_INTERNAL_API_PORT`/3001), scrapeado diretamente pelo Prometheus central (job `auth` → target `oauth:9464`).
 - Resource attribute `service.name=oauth` identifica a origem das métricas no Prometheus/Grafana.
 
-Não há push de métricas/traces para o `otel-collector` (serviço central em `docker-compose.yml`) — o exporter Prometheus é *pull-based* e já cobre o requisito; o job `auth` do `prometheus.yml` foi corrigido nesta branch para apontar pro hostname real do serviço (`oauth`, não `auth` — nome genérico do template central).
+Não há push de métricas/traces para o `otel-collector` (serviço central em `docker-compose.yml`) — o exporter Prometheus é *pull-based* e já cobre o requisito.
+
+**Sobre o hostname `auth` vs `oauth` no `prometheus.yml`:** o Prometheus, o OTel Collector e o Blackbox Exporter foram habilitados pelo professor direto no `main` do repo `base` (commit `e201543`, 2026-09-16) — não precisamos criar nada disso, só dar `git pull`. O `prometheus.yml` desse commit, porém, ainda aponta o job `auth` (e uma entrada do `health-checks`) pro hostname `auth`, que não existe na rede docker (nosso serviço se chama `oauth` desde 2026-09-02). Como o grupo não tem permissão de commit na `base`, a correção não foi feita lá — está em `backend/oauth/infra-local/prometheus.yml` (cópia local, só com o hostname trocado), aplicada por cima do arquivo oficial via `docker-compose.override.yml`. Ver [`infra-local/README.md`](./infra-local/README.md) para o comando completo e como conferir que pegou.
 
 ## 7. Configuração / variáveis de ambiente
 
