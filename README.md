@@ -71,9 +71,7 @@ o volume mantém a configuração.
   de nome seguem `first-name`/`last-name` em todas as rotas de usuário.
 - **A escrita de usuários e o CRUD de roles moram aqui.** `POST/PUT/PATCH/DELETE
   /users` (trilha DEV B) e `/roles` + role-mapping (trilha DEV D) estão
-  implementados sobre o Admin API. `/users` repassa o bearer do chamador ao
-  Keycloak; `/roles` exige o header, mas fala com o Keycloak pela service account
-  (ver [Roles](#roles-roles)).
+  implementados sobre o Admin API, protegidos pelo bearer do chamador.
 
 ### Por que um serviço separado?
 
@@ -108,15 +106,6 @@ As falhas do provedor são normalizadas no envelope de quatro chaves, sem vazar 
 | POST   | `/{id}/users/{userId}`    | Atribui o role a um usuário. → `204`         |
 | DELETE | `/{id}/users/{userId}`    | Remove a atribuição. → `204`                 |
 
-Todas as rotas de roles exigem `Authorization: Bearer <access_token>` e respondem
-`401` sem ele. No Swagger, o token vai pelo botão **Authorize**; nenhuma rota tem
-campo próprio para ele. O contrato ainda não declara essa exigência (ver
-[Contratos](#contratos)).
-
-> **Pendente:** hoje o serviço só confere se o header tem o formato
-> `Bearer <algo>`; não valida o token nem os roles de quem chama. Como as
-> chamadas ao Keycloak usam a service account, qualquer valor é aceito.
-
 As rotas de roles e de escrita de usuários exigem as credenciais do service account
 administrativo (`KEYCLOAK_ADMIN_CLIENT_ID` / `KEYCLOAK_ADMIN_CLIENT_SECRET`, via
 `grant_type=client_credentials`); sem elas o serviço não consegue token de admin e
@@ -132,19 +121,6 @@ responde `503`.
 | PUT | `/{id}` | Atualiza os dados do usuário (não altera `enabled`). → `200` |
 | PATCH | `/{id}` | Atualiza parcialmente o usuário ou sua senha. → `200` |
 | DELETE | `/{id}` | Desabilita logicamente o usuário. → `204` |
-
-### Infraestrutura
-
-| Método | Rota | Descrição |
-| ------ | ---- | --------- |
-| GET | `/health` | Healthcheck anônimo. → `200` |
-| GET | `/metrics` | Métricas no formato Prometheus (fora do Swagger). |
-
-Métricas expostas (`src/metrics/`):
-
-- `http_server_requests_seconds{method, uri, status}` — duração de cada requisição. `uri` é o padrão da rota (`/roles/:id`), nunca o path cru; `/health` e `/metrics` não são medidos. Nome e labels seguem o formato Micrometer, então o alerta `HighErrorRate` da `base` vale para o oauth. A latência tem alerta próprio (`OAuthHighLatency`), porque o prom-client não gera o `_max` que o `HighResponseTime` usa.
-- `oauth_keycloak_request_duration_seconds{operation, result}` — cada chamada ao Keycloak. `operation`: `login`, `refresh`, `admin_token`, `admin_api`. `result`: `ok`, `rejected` (Keycloak respondeu não-2xx) ou `unavailable` (rede ou timeout — o caso que vira `503`).
-- Métricas padrão do processo Node (memória, CPU, event loop).
 
 ## Variáveis de ambiente
 
@@ -177,11 +153,6 @@ docker compose up -d --build --wait
 
 Endereços: API `http://localhost:8181`, saúde `GET /health`, Swagger
 `http://localhost:8181/docs`, Keycloak `http://localhost:8081`.
-
-No Swagger, `/users` e `/roles` exigem o bearer, não o cookie de sessão: faça
-`POST /login`, copie o `access_token` da resposta, clique em **Authorize** e
-cole-o no campo `bearer` (sem o prefixo `Bearer`). O token vale
-`expires_in` segundos (10 min no realm local); depois disso, faça login de novo.
 
 > Após mudar `.env` ou o compose, recrie o container:
 > `docker compose up -d --build --force-recreate oauth`.
@@ -267,9 +238,7 @@ O corpo de sucesso contém `token_type`, `access_token`, `expires_in`,
 ## Contratos
 
 - `contracts/identity-gateway.yaml`: fragmento OpenAPI das rotas de autenticação,
-  usuários e roles. **Parcial:** algumas rotas ainda não estão descritas, e as
-  rotas de `/roles` não declaram `security: [{bearerAuth: []}]` nem `401`/`403`,
-  embora o serviço exija o bearer nelas.
+  usuários e roles. **Parcial:** algumas rotas ainda não estão descritas.
 - `infrastructure/dev.local/services/keycloak/constrsw.json` (na raiz do repo):
   realm importado pelo container do Keycloak. Traz o client `oauth-admin` (service
   account com `manage-users` / `view-users` / `query-users` / `manage-realm`).
