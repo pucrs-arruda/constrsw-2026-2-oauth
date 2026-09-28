@@ -108,7 +108,13 @@ Alertas disparados aparecem como **anotações vermelhas** em todos os gráficos
 
 As métricas `http_client_requests_seconds` (chamadas ao Keycloak) só existem porque o `WebClientConfig` passou a usar o `WebClient.Builder` instrumentado do Spring Boot. Os buckets fixos de 100 ms/250 ms/1 s (`management.metrics.distribution.slo`) alimentam o Apdex.
 
-Para a apresentação, `./scripts/generate-traffic.sh 300` gera tráfego variado (CRUD, 401, 403, 404, 409, logins com falha) e deixa todos os gráficos vivos. Em poucos minutos ele também dispara o alerta `HighLoginFailureRatio`.
+Scripts para a apresentação (em `scripts/`):
+
+| Script | O que faz |
+| --- | --- |
+| `demo-e2e.sh` | Fluxo guiado com PASS/FAIL: health, 401, login admin (200), student (403), CRUD de role |
+| `generate-traffic.sh [segundos]` | Tráfego variado (CRUD, 401, 403, 404, 409, logins) que deixa todos os gráficos vivos |
+| `trigger-login-alert.sh [segundos]` | Simula força bruta no `/login` e acompanha o `HighLoginFailureRatio` até virar firing (~3 min). Usa um usuário inexistente para o Keycloak não bloquear o admin |
 
 Acesso: `http://localhost:3300`, login `admin` / `admin`.
 

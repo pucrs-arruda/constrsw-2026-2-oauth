@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Gera tráfego variado contra a API oauth para popular o dashboard do Grafana
 # durante a apresentação: CRUD de usuários/roles (admin), 403 (student),
-# 401 (sem token / token inválido), 404, 409 e logins com falha.
+# 401 (sem token / token inválido), 404, 409 e logins.
 #
 # Uso: ./scripts/generate-traffic.sh [segundos]    (padrão: 240)
-# As falhas de login usam um usuário inexistente, para a proteção contra
-# força bruta do Keycloak não bloquear as contas admin/student.
+# Logins com senha errada (e o alerta de força bruta) ficam em
+# ./scripts/trigger-login-alert.sh.
 # Os usuários de demonstração criados terminam desabilitados; as roles, removidas.
 B=${BASE_URL:-http://localhost:8181}
 DUR=${1:-240}
@@ -26,7 +26,6 @@ while [ $SECONDS -lt $END ]; do
   wait
   if [ $((n % 3)) -eq 0 ]; then
     curl -s -o /dev/null -d "username=admin@pucrs.br&password=a12345678" $B/login
-    curl -s -o /dev/null -d "username=intruso@example.com&password=chute$n" $B/login   # falha
   fi
   if [ $((n % 4)) -eq 0 ]; then
     R="demo-role-$RANDOM"
