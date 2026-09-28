@@ -1,13 +1,16 @@
 # Override LOCAL, opcional, pra rodar o compose oficial do professor em Mac
-# com Apple Silicon (M-series recentes) sem os dois problemas de ambiente
+# com Apple Silicon (M-series recentes) sem os problemas de ambiente
 # relatados a ele (ver backend/oauth/infra-local/README.md): SIGILL da JVM
-# do Keycloak e o healthcheck que depende de curl (que nao existe na imagem).
+# do Keycloak, o healthcheck que depende de curl (que nao existe na imagem)
+# e o prometheus.yml do professor ainda apontando pro hostname antigo
+# "auth" em vez de "oauth" (job "auth" e job "health-checks").
 #
 # Nao muda nada do docker-compose.yml oficial na raiz do repo - so
-# adiciona/sobrescreve o necessario no servico "keycloak". Fica dentro de
-# backend/oauth porque e o unico lugar onde o grupo03 tem permissao de
-# commit; o docker-compose.yml e o Dockerfile oficiais do professor
-# continuam intocados.
+# adiciona/sobrescreve o necessario nos serviços "keycloak" e "prometheus".
+# Fica dentro de backend/oauth porque e o unico lugar onde o grupo03 tem
+# permissao de commit; os arquivos oficiais do professor (docker-compose.yml,
+# Dockerfile do keycloak, infrastructure/.../prometheus.yml) continuam
+# intocados.
 #
 # Uso (a partir da raiz do repo base):
 #   docker compose -f docker-compose.yml -f backend/oauth/docker-compose.override.yml up -d --build
@@ -34,3 +37,15 @@ services:
       interval: 10s
       timeout: 10s
       retries: 20
+
+  prometheus:
+    # O prometheus.yml oficial (infrastructure/dev.local/services/prometheus/
+    # prometheus.yml, commit e201543 do professor) aponta o job "auth" e uma
+    # entrada do job "health-checks" pro hostname "auth", mas o serviço no
+    # docker-compose.yml se chama "oauth" - sem essa troca o Prometheus nunca
+    # consegue resolver o DNS e o job fica "down" pra sempre. Corrigido numa
+    # cópia local, sem mexer no arquivo do professor em infrastructure/.
+    volumes:
+      - constrsw-prometheus-data:/prometheus
+      - ./backend/oauth/infra-local/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./infrastructure/dev.local/services/prometheus/alerts.yml:/etc/prometheus/alerts.yml

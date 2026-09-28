@@ -21,10 +21,15 @@ docker compose up -d --build
 **Mac com Apple Silicon recente (M4) / macOS 15.2+**: a imagem oficial do
 Keycloak crasha (`SIGILL` na JVM) e o healthcheck dela depende de `curl`
 (que nao existe na imagem) - dois bugs de ambiente, reportados ao professor,
-sem relacao com a configuracao dele. Contornamos os dois **sem alterar
-nenhum arquivo da `base`**, com um override que mora todo dentro deste
-submodulo (`backend/oauth/docker-compose.override.yml` +
-`backend/oauth/infra-local/keycloak.Dockerfile` - detalhes em
+sem relacao com a configuracao dele. Alem disso, o `prometheus.yml` central
+(commit `e201543` do professor, sem a correcao de hostname que fizemos)
+aponta o job `auth` pro hostname `auth`, que nao existe na rede docker (o
+servico se chama `oauth`) - isso faz o Prometheus nunca conseguir raspar
+nossas metricas, em qualquer maquina, nao so Apple Silicon. Contornamos os
+tres **sem alterar nenhum arquivo da `base`**, com um override que mora
+todo dentro deste submodulo (`backend/oauth/docker-compose.override.yml` +
+`backend/oauth/infra-local/keycloak.Dockerfile` +
+`backend/oauth/infra-local/prometheus.yml` - detalhes em
 [`infra-local/README.md`](./infra-local/README.md)). Para subir usando o
 contorno, rode este comando em vez do `docker compose up` acima (ainda a
 partir da raiz do repo, `T1`):
@@ -40,9 +45,9 @@ interna do container e `3001`).
 
 - Swagger: http://localhost:8181/swagger
 - Health check: http://localhost:8181/health
-- Metricas (Prometheus/OpenMetrics): http://localhost:8281/metrics
+- Metricas (Prometheus/OpenMetrics): http://localhost:8381/metrics
 - Keycloak (console admin): http://localhost:8081 (`admin` / `a12345678`)
-- Prometheus (raiz do repo `base`, `docker volume create constrsw-prometheus-data` antes do primeiro `up`): http://localhost:9090/targets
+- Prometheus (raiz do repo `base`, `docker volume create constrsw-prometheus-data` antes do primeiro `up`; use o comando com o override acima, senao o job `auth` fica sempre `down`): http://localhost:9090/targets
 
 Para rodar so a API localmente (sem Docker), com o Keycloak do compose ja
 de pe:
@@ -100,9 +105,13 @@ que e repassado como esta para a Admin REST API do Keycloak.
 7. **Metricas Prometheus**: instrumentacao automatica via OpenTelemetry
    (`HttpInstrumentation`/`ExpressInstrumentation`), exportadas em `/metrics`
    (porta `OAUTH_INTERNAL_METRICS_PORT`) via `PrometheusExporter` (pull, sem
-   passar pelo `otel-collector`). Corrigimos o job `auth` do
-   `prometheus.yml` central (target `auth:9464` -> `oauth:9464`), ja que o
-   nosso servico no `docker-compose.yml` se chama `oauth`.
+   passar pelo `otel-collector`). O `prometheus.yml` oficial do professor
+   (repo `base`, commit `e201543`) aponta o job `auth` pro hostname `auth`,
+   que nao existe (nosso servico se chama `oauth`) - como nao temos
+   permissao de commit na `base`, corrigimos isso com uma copia local do
+   arquivo (`backend/oauth/infra-local/prometheus.yml`), aplicada via
+   `docker-compose.override.yml`, sem tocar no arquivo do professor. Ver
+   [`infra-local/README.md`](./infra-local/README.md).
 
 ## Cheat-sheet de curl
 
