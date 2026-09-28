@@ -32,6 +32,11 @@
       "App\\": "src/"
     }
   },
+  "autoload-dev": {
+    "psr-4": {
+      "App\\Tests\\": "tests/"
+    }
+  },
   "extra": {
     "symfony": {
       "allow-contrib": false,

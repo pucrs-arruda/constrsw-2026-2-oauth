@@ -21,7 +21,7 @@ This isn't a thin wrapper around Keycloak's REST API — it's a proper **anti-co
 - **Metrics for free.** An `EventSubscriber` (`MetricsRequestListener`) hooks `kernel.request`/`kernel.response` once, globally, and records request count + duration (RED-style) for every route automatically — no per-endpoint instrumentation, no risk of forgetting to add it to a new controller.
 - **Soft-delete as an invariant, not a convention.** "Delete" never means `DELETE FROM` here — it means `enabled: false` on Keycloak. Enforced at the domain level (`DisableUserUseCase`, role deletion), never left to controller discipline.
 - **Admin token caching.** Client-credentials tokens for the Keycloak Admin API are cached in-memory with their `expires_in` and only refreshed when they actually expire — not fetched on every single admin call.
-- **Tested where it matters.** 152 test methods across 31 files: unit tests per use case and per adapter, integration tests per controller. `phpunit.dist.xml` runs with `failOnDeprecation` / `failOnNotice` / `failOnWarning` — silent warnings are treated as build failures, not ignored.
+- **Tested where it matters.** 165 test methods across 36 files: unit tests per use case and per adapter, integration tests per controller, and end-to-end tests for complete workflows (`unit`, `integration`, `e2e` suites). `phpunit.dist.xml` runs with `failOnDeprecation` / `failOnNotice` / `failOnWarning` — silent warnings are treated as build failures, not ignored.
 - **Zero manual setup.** Keycloak boots with the realm, client, roles and policies already provisioned via `--import-realm`; Grafana boots with its Prometheus datasource and dashboard folder already provisioned. `docker compose up -d` is the entire onboarding process.
 
 ---

@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace App\Tests\Integration\Infrastructure\Http\Controller;
 
+use App\Tests\Support\KeycloakTestTrait;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\HttpFoundation\Response;
 
 final class AuthorizationControllerTest extends WebTestCase
 {
+    use KeycloakTestTrait;
+
     private KernelBrowser $client;
 
     protected function setUp(): void
@@ -41,6 +44,8 @@ final class AuthorizationControllerTest extends WebTestCase
      */
     public function testAuthorizeInvalidTokenReturns401(): void
     {
+        $this->requireKeycloak();
+
         $this->client->request(
             method: 'POST',
             uri: '/authorize',
@@ -183,6 +188,8 @@ final class AuthorizationControllerTest extends WebTestCase
 
     private function login(string $username, string $password): string
     {
+        $this->requireKeycloak();
+
         $this->client->request(
             method: 'POST',
             uri: '/login',

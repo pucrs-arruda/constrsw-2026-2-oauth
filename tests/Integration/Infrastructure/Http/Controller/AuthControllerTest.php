@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace App\Tests\Integration\Infrastructure\Http\Controller;
 
+use App\Tests\Support\KeycloakTestTrait;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\HttpFoundation\Response;
 
 final class AuthControllerTest extends WebTestCase
 {
+    use KeycloakTestTrait;
+
     private KernelBrowser $client;
 
     protected function setUp(): void
@@ -22,6 +25,8 @@ final class AuthControllerTest extends WebTestCase
      */
     public function testLoginSuccessWithJson(): void
     {
+        $this->requireKeycloak();
+
         $this->client->request(
             method: 'POST',
             uri: '/login',
@@ -48,6 +53,8 @@ final class AuthControllerTest extends WebTestCase
      */
     public function testLoginSuccessWithFormData(): void
     {
+        $this->requireKeycloak();
+
         $this->client->request(
             method: 'POST',
             uri: '/login',
@@ -70,6 +77,8 @@ final class AuthControllerTest extends WebTestCase
      */
     public function testLoginWithInvalidCredentialsReturns401(): void
     {
+        $this->requireKeycloak();
+
         $this->client->request(
             method: 'POST',
             uri: '/login',
@@ -140,6 +149,8 @@ final class AuthControllerTest extends WebTestCase
      */
     public function testRefreshTokenInvalidReturns401(): void
     {
+        $this->requireKeycloak();
+
         $this->client->request(
             method: 'POST',
             uri: '/refresh',
@@ -223,6 +234,8 @@ final class AuthControllerTest extends WebTestCase
      */
     public function testMeInvalidTokenReturns401(): void
     {
+        $this->requireKeycloak();
+
         $this->client->request(
             method: 'GET',
             uri: '/me',
@@ -238,6 +251,8 @@ final class AuthControllerTest extends WebTestCase
 
     private function authenticateSeedUser(): array
     {
+        $this->requireKeycloak();
+
         $this->client->request(
             method: 'POST',
             uri: '/login',

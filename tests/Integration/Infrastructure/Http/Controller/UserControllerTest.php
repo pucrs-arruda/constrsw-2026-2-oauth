@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace App\Tests\Integration\Infrastructure\Http\Controller;
 
+use App\Tests\Support\KeycloakTestTrait;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\HttpFoundation\Response;
 
 final class UserControllerTest extends WebTestCase
 {
+    use KeycloakTestTrait;
+
     private KernelBrowser $client;
 
     protected function setUp(): void
@@ -143,6 +146,8 @@ final class UserControllerTest extends WebTestCase
      */
     public function testUserFullLifecycleInKeycloak(): void
     {
+        $this->requireKeycloak();
+
         $uniqueSuffix = uniqid();
         $email = "e2e-user-{$uniqueSuffix}@constrsw.pucrs.br";
         $initialPassword = 'initialPassword123!';

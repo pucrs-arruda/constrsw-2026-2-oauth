@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace App\Tests\Integration\Infrastructure\Http\Controller;
 
+use App\Tests\Support\KeycloakTestTrait;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\HttpFoundation\Response;
 
 final class RoleControllerTest extends WebTestCase
 {
+    use KeycloakTestTrait;
+
     private KernelBrowser $client;
 
     protected function setUp(): void
@@ -63,6 +66,8 @@ final class RoleControllerTest extends WebTestCase
      */
     public function testGetRoleByIdNotFoundReturns404(): void
     {
+        $this->requireKeycloak();
+
         $this->client->request('GET', '/roles/00000000-0000-0000-0000-000000000000');
 
         $response = $this->client->getResponse();
@@ -81,6 +86,8 @@ final class RoleControllerTest extends WebTestCase
      */
     public function testRoleCreationAndRetrievalLifecycle(): void
     {
+        $this->requireKeycloak();
+
         $uniqueSuffix = uniqid();
         $roleName = "role-test-{$uniqueSuffix}";
         $roleDescription = "Papel de teste automatizado {$uniqueSuffix}";
