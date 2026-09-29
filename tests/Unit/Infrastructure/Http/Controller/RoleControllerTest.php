@@ -29,6 +29,7 @@ final class RoleControllerTest extends TestCase
     private DeleteRoleUseCaseInterface $deleteRoleUseCase;
     private AssignUserRoleUseCaseInterface $assignUserRoleUseCase;
     private UnassignUserRoleUseCaseInterface $unassignUserRoleUseCase;
+    private \App\Domain\Port\Inbound\GetUserRolesUseCaseInterface $getUserRolesUseCase;
     private RoleController $controller;
 
     protected function setUp(): void
@@ -40,6 +41,7 @@ final class RoleControllerTest extends TestCase
         $this->deleteRoleUseCase = $this->createMock(DeleteRoleUseCaseInterface::class);
         $this->assignUserRoleUseCase = $this->createMock(AssignUserRoleUseCaseInterface::class);
         $this->unassignUserRoleUseCase = $this->createMock(UnassignUserRoleUseCaseInterface::class);
+        $this->getUserRolesUseCase = $this->createMock(\App\Domain\Port\Inbound\GetUserRolesUseCaseInterface::class);
 
         $this->controller = new RoleController(
             $this->createRoleUseCase,
@@ -48,7 +50,8 @@ final class RoleControllerTest extends TestCase
             $this->updateRoleUseCase,
             $this->deleteRoleUseCase,
             $this->assignUserRoleUseCase,
-            $this->unassignUserRoleUseCase
+            $this->unassignUserRoleUseCase,
+            $this->getUserRolesUseCase
         );
     }
 
@@ -238,5 +241,171 @@ final class RoleControllerTest extends TestCase
         $response = $this->controller->unassignRole('user-123', 'role-456');
 
         $this->assertSame(Response::HTTP_NO_CONTENT, $response->getStatusCode());
+    }
+
+    public function testListUserRolesReturns200WithRoles(): void
+    {
+        $this->getUserRolesUseCase
+            ->expects($this->once())
+            ->method('execute')
+            ->with('user-123')
+            ->willReturn(['administrator', 'professor']);
+
+        $response = $this->controller->listUserRoles('user-123');
+
+        $this->assertSame(Response::HTTP_OK, $response->getStatusCode());
+        $data = json_decode((string) $response->getContent(), true);
+        $this->assertSame('user-123', $data['userId']);
+        $this->assertSame(['administrator', 'professor'], $data['roles']);
+    }
+
+    public function testAssignRoleByPathReturns200(): void
+    {
+        $this->assignUserRoleUseCase
+            ->expects($this->once())
+            ->method('execute')
+            ->with('user-123', $this->callback(function (AssignRoleDTO $dto) {
+                return $dto->roleId === 'role-path-1';
+            }))
+            ->willReturn([
+                'success' => true,
+                'userId' => 'user-123',
+                'roleId' => 'role-path-1',
+                'roleName' => 'student',
+                'roles' => ['student'],
+            ]);
+
+        $response = $this->controller->assignRoleByPath('user-123', 'role-path-1');
+
+        $this->assertSame(Response::HTTP_OK, $response->getStatusCode());
+        $data = json_decode((string) $response->getContent(), true);
+        $this->assertTrue($data['success']);
+        $this->assertSame(['student'], $data['roles']);
+    }
+
+    public function testAssignRoleThrowsWhenGuardRejects(): void
+    {
+        $guard = $this->createMock(\App\Infrastructure\Http\Security\AdminAuthorizationGuardInterface::class);
+        $guard->expects($this->once())
+            ->method('requireAdmin')
+            ->willThrowException(new \App\Domain\Exception\AccessDeniedException('Apenas admin pode atribuir'));
+
+        $controller = new RoleController(
+            $this->createRoleUseCase,
+            $this->listRolesUseCase,
+            $this->getRoleByIdUseCase,
+            $this->updateRoleUseCase,
+            $this->deleteRoleUseCase,
+            $this->assignUserRoleUseCase,
+            $this->unassignUserRoleUseCase,
+            $this->getUserRolesUseCase,
+            $guard
+        );
+
+        $request = new Request(content: json_encode(['roleName' => 'admin'], JSON_THROW_ON_ERROR));
+
+        $this->expectException(\App\Domain\Exception\AccessDeniedException::class);
+        $controller->assignRole('user-target', $request);
+    }
+
+    public function testAssignRoleByPathThrowsWhenGuardRejects(): void
+    {
+        $guard = $this->createMock(\App\Infrastructure\Http\Security\AdminAuthorizationGuardInterface::class);
+        $guard->expects($this->once())
+            ->method('requireAdmin')
+            ->willThrowException(new \App\Domain\Exception\AccessDeniedException('Apenas admin pode atribuir'));
+
+        $controller = new RoleController(
+            $this->createRoleUseCase,
+            $this->listRolesUseCase,
+            $this->getRoleByIdUseCase,
+            $this->updateRoleUseCase,
+            $this->deleteRoleUseCase,
+            $this->assignUserRoleUseCase,
+            $this->unassignUserRoleUseCase,
+            $this->getUserRolesUseCase,
+            $guard
+        );
+
+        $request = new Request();
+
+        $this->expectException(\App\Domain\Exception\AccessDeniedException::class);
+        $controller->assignRoleByPath('user-target', 'role-123', $request);
+    }
+
+    public function testUnassignRoleThrowsWhenGuardRejects(): void
+    {
+        $guard = $this->createMock(\App\Infrastructure\Http\Security\AdminAuthorizationGuardInterface::class);
+        $guard->expects($this->once())
+            ->method('requireAdmin')
+            ->willThrowException(new \App\Domain\Exception\AccessDeniedException('Apenas admin pode remover'));
+
+        $controller = new RoleController(
+            $this->createRoleUseCase,
+            $this->listRolesUseCase,
+            $this->getRoleByIdUseCase,
+            $this->updateRoleUseCase,
+            $this->deleteRoleUseCase,
+            $this->assignUserRoleUseCase,
+            $this->unassignUserRoleUseCase,
+            $this->getUserRolesUseCase,
+            $guard
+        );
+
+        $request = new Request();
+
+        $this->expectException(\App\Domain\Exception\AccessDeniedException::class);
+        $controller->unassignRole('user-target', 'role-123', $request);
+    }
+
+    public function testCreateRoleThrowsWhenGuardRejects(): void
+    {
+        $guard = $this->createMock(\App\Infrastructure\Http\Security\AdminAuthorizationGuardInterface::class);
+        $guard->expects($this->once())
+            ->method('requireAdmin')
+            ->willThrowException(new \App\Domain\Exception\AccessDeniedException('Apenas admin pode criar'));
+
+        $controller = new RoleController(
+            $this->createRoleUseCase,
+            $this->listRolesUseCase,
+            $this->getRoleByIdUseCase,
+            $this->updateRoleUseCase,
+            $this->deleteRoleUseCase,
+            $this->assignUserRoleUseCase,
+            $this->unassignUserRoleUseCase,
+            $this->getUserRolesUseCase,
+            $guard
+        );
+
+        $request = new Request(content: json_encode(['name' => 'superadmin'], JSON_THROW_ON_ERROR));
+
+        $this->expectException(\App\Domain\Exception\AccessDeniedException::class);
+        $controller->create($request);
+    }
+
+    public function testListUserRolesThrowsWhenGuardRejects(): void
+    {
+        $guard = $this->createMock(\App\Infrastructure\Http\Security\AdminAuthorizationGuardInterface::class);
+        $guard->expects($this->once())
+            ->method('requireAdminOrSelf')
+            ->with($this->isInstanceOf(Request::class), 'other-target')
+            ->willThrowException(new \App\Domain\Exception\AccessDeniedException('Apenas admin ou o próprio'));
+
+        $controller = new RoleController(
+            $this->createRoleUseCase,
+            $this->listRolesUseCase,
+            $this->getRoleByIdUseCase,
+            $this->updateRoleUseCase,
+            $this->deleteRoleUseCase,
+            $this->assignUserRoleUseCase,
+            $this->unassignUserRoleUseCase,
+            $this->getUserRolesUseCase,
+            $guard
+        );
+
+        $request = new Request();
+
+        $this->expectException(\App\Domain\Exception\AccessDeniedException::class);
+        $controller->listUserRoles('other-target', $request);
     }
 }

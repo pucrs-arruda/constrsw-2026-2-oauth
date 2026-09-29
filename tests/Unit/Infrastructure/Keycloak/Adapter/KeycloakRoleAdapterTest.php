@@ -367,7 +367,7 @@ final class KeycloakRoleAdapterTest extends TestCase
     public function testAssignRoleToUserSuccess(): void
     {
         $this->httpClient
-            ->expects($this->exactly(3))
+            ->expects($this->exactly(4))
             ->method('requestAdmin')
             ->willReturnCallback(function (string $method, string $path, array $headers, ?string $body, bool $mapUserExceptions) {
                 if ($method === 'GET' && $path === 'admin/realms/constrsw/users/user-123') {
@@ -385,6 +385,10 @@ final class KeycloakRoleAdapterTest extends TestCase
                     return ['status' => 204, 'headers' => [], 'data' => [], 'raw' => ''];
                 }
 
+                if ($method === 'GET' && $path === 'admin/realms/constrsw/users/user-123/role-mappings/realm') {
+                    return ['status' => 200, 'headers' => [], 'data' => [['id' => 'role-456', 'name' => 'professor']], 'raw' => ''];
+                }
+
                 $this->fail("Chamada inesperada: {$method} {$path}");
             });
 
@@ -394,14 +398,14 @@ final class KeycloakRoleAdapterTest extends TestCase
         $this->assertSame('user-123', $result['userId']);
         $this->assertSame('role-456', $result['roleId']);
         $this->assertSame('professor', $result['roleName']);
+        $this->assertSame(['professor'], $result['roles']);
     }
 
     public function testAssignRoleToUserThrowsUserNotFoundExceptionWhenUserNotFound(): void
     {
         $this->httpClient
-            ->expects($this->once())
+            ->expects($this->exactly(3))
             ->method('requestAdmin')
-            ->with('GET', 'admin/realms/constrsw/users/inexistente', [], null, false)
             ->willReturn(['status' => 404, 'headers' => [], 'data' => [], 'raw' => '']);
 
         $this->expectException(\App\Domain\Exception\UserNotFoundException::class);

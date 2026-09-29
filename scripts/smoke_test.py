@@ -3,6 +3,13 @@
 Smoke test for the oauth microservice — hits every endpoint, in the correct
 dependency order, against a running stack (docker compose up -d).
 
+Tests BOTH happy paths (200, 201, 204) and failure modes (400, 401, 403, 404, 409):
+- Validation errors (400)
+- Bad credentials & invalid/expired tokens (401)
+- Non-admin RBAC restrictions & forbidden policies (403)
+- Non-existent resource lookups (404)
+- Uniqueness and conflict rejection (409)
+
 Zero dependencies beyond the Python 3 standard library (urllib/json), so it
 runs anywhere Python 3 runs, no `pip install` needed before a demo.
 
@@ -112,6 +119,13 @@ class Runner:
         self.failed = 0
         self.summary: list[tuple[str, bool, str]] = []  # (label, ok, note)
 
+    def section(self, title: str) -> None:
+        s = self.s
+        print()
+        print(s.bold(s.magenta("═" * 72)))
+        print(s.bold(s.magenta(f"  ► {title}")))
+        print(s.bold(s.magenta("═" * 72)))
+
     @staticmethod
     def _truncate_long_strings(value: Any, max_len: int = 48) -> Any:
         """Recursively shortens long string values (JWTs, tokens) so a terminal
@@ -213,7 +227,7 @@ class Runner:
 
 
 # --------------------------------------------------------------------------
-# Scenario: every endpoint, in dependency order
+# Scenario: every endpoint, both happy paths and error cases
 # --------------------------------------------------------------------------
 
 SEED_USERS = {
@@ -230,19 +244,33 @@ def run(base_url: str, delay: float, color: bool) -> int:
     run_id = uuid.uuid4().hex[:8]
 
     print(s.bold(s.magenta("┌" + "─" * 70 + "┐")))
-    print(s.bold(s.magenta("│ oauth microservice — full endpoint smoke test" + " " * 23 + "│")))
+    print(s.bold(s.magenta("│ oauth microservice — full endpoint smoke test (happy & error paths) │")))
     print(s.bold(s.magenta("└" + "─" * 70 + "┘")))
     print(s.dim(f" target: {base_url}  |  run id: {run_id}  |  delay between steps: {delay}s"))
 
-    # 1-3. Health / root -----------------------------------------------------
+    # =========================================================================
+    # Section 1: Health & Connectivity Checks
+    # =========================================================================
+    r.section("1. Health & Connectivity Checks")
     r.step("GET", "/", title="API root (alias of health)")
     r.step("GET", "/health", title="Container/orchestration healthcheck")
     r.step("GET", "/api/health", title="Public healthcheck alias")
 
-    # 4-5. Authenticate -------------------------------------------------------
+    # =========================================================================
+    # Section 2: Authentication & Failure Modes (401)
+    # =========================================================================
+    r.section("2. Authentication & Failure Modes")
+
+    # 2.1 Negative: Login with invalid password -> 401 INVALID_CREDENTIALS
+    r.step("POST", "/login", title="Negative: Login with invalid password (expect 401)",
+           json_body={"username": "admin@pucrs.br", "password": "wrong_password"},
+           expected=(401,),
+           note="Expected 401 INVALID_CREDENTIALS — security check")
+
+    # 2.2 Positive: Login as administrator -> 200
     username, password = SEED_USERS["administrator"]
-    login = r.step("POST", "/login", title=f"Login as {username} (password grant)",
-                    json_body={"username": username, "password": password})
+    login = r.step("POST", "/login", title=f"Login as {username} (administrator)",
+                   json_body={"username": username, "password": password})
     if login.status != 200 or not login.body:
         print(s.red("\nCannot continue without a valid login — aborting the rest of the scenario."))
         r.print_summary()
@@ -251,9 +279,25 @@ def run(base_url: str, delay: float, color: bool) -> int:
     access_token = login.body["access_token"]
     refresh_token = login.body["refresh_token"]
 
-    r.step("GET", "/me", title="Fetch the authenticated user's profile", token=access_token)
+    # 2.3 Positive: Fetch authenticated user's profile (/me) -> 200
+    r.step("GET", "/me", title="Fetch the authenticated admin profile", token=access_token)
 
-    # 6-10. Users --------------------------------------------------------------
+    # 2.4 Negative: Fetch profile with invalid/malformed token -> 401 INVALID_TOKEN
+    r.step("GET", "/me", title="Negative: Fetch profile with invalid token (expect 401)",
+           token="invalid-token-string", expected=(401,),
+           note="Expected 401 INVALID_TOKEN — security validation")
+
+    # =========================================================================
+    # Section 3: Users Management: Happy Path, Validation (400) & Conflict (409)
+    # =========================================================================
+    r.section("3. User Management, Validation & Conflict Errors")
+
+    # 3.1 Negative: Create user with empty payload -> 400 VALIDATION_ERROR
+    r.step("POST", "/users", title="Negative: Create user with empty body (expect 400)",
+           token=access_token, json_body={}, expected=(400,),
+           note="Expected 400 VALIDATION_ERROR for missing required fields")
+
+    # 3.2 Positive: Create throwaway demo user -> 201
     demo_email = f"smoke-{run_id}@pucrs.br"
     created_user = r.step(
         "POST", "/users", title=f"Create a throwaway demo user ({demo_email})", token=access_token,
@@ -265,8 +309,26 @@ def run(base_url: str, delay: float, color: bool) -> int:
     )
     user_id = (created_user.body or {}).get("id")
 
+    # 3.3 Negative: Create duplicate user with same email -> 409 USER_ALREADY_EXISTS
+    r.step("POST", "/users", title="Negative: Attempt duplicate email creation (expect 409)",
+           token=access_token,
+           json_body={
+               "username": demo_email, "email": demo_email,
+               "firstName": "Duplicate", "lastName": "Attempt", "password": "a12345678",
+           },
+           expected=(409,),
+           note="Expected 409 USER_ALREADY_EXISTS — uniqueness enforcement")
+
+    # 3.4 Positive: List active users -> 200
     r.step("GET", "/users", title="List active users", token=access_token)
 
+    # 3.5 Negative: Fetch user by non-existent UUID -> 404 USER_NOT_FOUND
+    r.step("GET", "/users/00000000-0000-0000-0000-000000000000",
+           title="Negative: Fetch non-existent user by UUID (expect 404)",
+           token=access_token, expected=(404,),
+           note="Expected 404 USER_NOT_FOUND")
+
+    # 3.6 Positive: Fetch existing demo user by id -> 200
     if user_id:
         r.step("GET", f"/users/{user_id}", title="Fetch the demo user by id", token=access_token)
         r.step("PUT", f"/users/{user_id}", title="Update the demo user's attributes", token=access_token,
@@ -276,7 +338,17 @@ def run(base_url: str, delay: float, color: bool) -> int:
     else:
         print(s.yellow("     (no user id returned — skipping id-scoped user checks)"))
 
-    # 11-15. Roles ---------------------------------------------------------------
+    # =========================================================================
+    # Section 4: Roles Management: Happy Path, Validation (400) & Conflict (409)
+    # =========================================================================
+    r.section("4. Role Management, Validation & Conflict Errors")
+
+    # 4.1 Negative: Create role with empty/blank name -> 400 VALIDATION_ERROR
+    r.step("POST", "/roles", title="Negative: Create role with blank name (expect 400)",
+           token=access_token, json_body={"name": "   "}, expected=(400,),
+           note="Expected 400 VALIDATION_ERROR for empty role name")
+
+    # 4.2 Positive: Create throwaway demo role -> 201
     role_name = f"smoke-role-{run_id}"
     created_role = r.step(
         "POST", "/roles", title=f"Create a throwaway demo role ({role_name})", token=access_token,
@@ -285,7 +357,20 @@ def run(base_url: str, delay: float, color: bool) -> int:
     )
     role_id = (created_role.body or {}).get("id")
 
+    # 4.3 Negative: Create duplicate role name -> 409 ROLE_ALREADY_EXISTS
+    r.step("POST", "/roles", title="Negative: Attempt duplicate role name (expect 409)",
+           token=access_token, json_body={"name": role_name, "description": "Duplicate attempt"},
+           expected=(409,),
+           note="Expected 409 ROLE_ALREADY_EXISTS — uniqueness enforcement")
+
+    # 4.4 Positive: List roles -> 200
     r.step("GET", "/roles", title="List roles", token=access_token)
+
+    # 4.5 Negative: Fetch role by non-existent UUID -> 404 ROLE_NOT_FOUND
+    r.step("GET", "/roles/00000000-0000-0000-0000-000000000000",
+           title="Negative: Fetch non-existent role by UUID (expect 404)",
+           token=access_token, expected=(404,),
+           note="Expected 404 ROLE_NOT_FOUND")
 
     if role_id:
         r.step("GET", f"/roles/{role_id}", title="Fetch the demo role by id", token=access_token)
@@ -294,25 +379,110 @@ def run(base_url: str, delay: float, color: bool) -> int:
         r.step("PATCH", f"/roles/{role_id}", title="Partial update of the demo role", token=access_token,
                json_body={"description": "Updated via PATCH (partial update)"})
 
-    # 16. Assign the role to the demo user -----------------------------------
+    # =========================================================================
+    # Section 5: Role Assignment & Inspection
+    # =========================================================================
+    r.section("5. Role Assignment & Inspection")
     if user_id and role_id:
+        # Positive: Assign role as admin -> 200
         r.step("POST", f"/users/{user_id}/roles", title="Assign the demo role to the demo user",
                token=access_token, json_body={"roleId": role_id})
+        # Positive: Inspect assigned roles -> 200
+        r.step("GET", f"/users/{user_id}/roles", title="Inspect the demo user's assigned roles",
+               token=access_token)
 
-    # 17-18. Authorization / policy engine ------------------------------------
+    # =========================================================================
+    # Section 6: RBAC Policy Engine Authorization (/authorize)
+    # =========================================================================
+    r.section("6. Institutional Policy Matrix Authorization")
     r.step("POST", "/authorize", title="administrator requests 'rooms' — should be granted",
            token=access_token, json_body={"resource": "rooms"}, expected=(200,))
-    r.step("POST", "/authorize", title="administrator requests 'courses' — outside the matrix, should be denied",
+    r.step("POST", "/authorize", title="Negative: administrator requests 'courses' — outside matrix (expect 403)",
            token=access_token, json_body={"resource": "courses"}, expected=(403,),
-           note="This 403 is the expected, correct response — not a failure of the API.")
+           note="Expected 403 ACCESS_DENIED — resource outside role matrix")
 
-    # 19. Refresh the session --------------------------------------------------
-    refreshed = r.step("POST", "/refresh", title="Renew the session using the refresh token",
+    # =========================================================================
+    # Section 7: Security Guard & Non-Admin Enforcement (403 Forbidden)
+    # =========================================================================
+    r.section("7. Security Guard & Non-Admin Enforcement (403 Forbidden)")
+
+    # 7.1 Login as non-admin student
+    student_user, student_pass = SEED_USERS["student"]
+    student_login = r.step("POST", "/login", title=f"Login as regular student ({student_user})",
+                           json_body={"username": student_user, "password": student_pass})
+    student_token = (student_login.body or {}).get("access_token", "")
+
+    if student_token and user_id and role_id:
+        # 7.2 Non-admin attempts to assign role -> 403
+        r.step("POST", f"/users/{user_id}/roles",
+               title="Negative: Student attempts to assign role to user (expect 403)",
+               token=student_token, json_body={"roleId": role_id}, expected=(403,),
+               note="Expected 403 ACCESS_DENIED — non-admins cannot assign roles")
+
+        # 7.3 Non-admin attempts to unassign role -> 403
+        r.step("DELETE", f"/users/{user_id}/roles/{role_id}",
+               title="Negative: Student attempts to unassign role from user (expect 403)",
+               token=student_token, expected=(403,),
+               note="Expected 403 ACCESS_DENIED — non-admins cannot unassign roles")
+
+        # 7.4 Non-admin attempts to create a role in catalog -> 403
+        r.step("POST", "/roles",
+               title="Negative: Student attempts to create a role (expect 403)",
+               token=student_token, json_body={"name": "forbidden-role"}, expected=(403,),
+               note="Expected 403 ACCESS_DENIED — only admins can create roles")
+
+        # 7.5 Non-admin attempts to create a user -> 403
+        r.step("POST", "/users",
+               title="Negative: Student attempts to create a new user (expect 403)",
+               token=student_token,
+               json_body={"email": "hacked@pucrs.br", "firstName": "H", "lastName": "K", "password": "pass"},
+               expected=(403,),
+               note="Expected 403 ACCESS_DENIED — only admins can create users")
+
+        # 7.6 Non-admin attempts to delete a user -> 403
+        r.step("DELETE", f"/users/{user_id}",
+               title="Negative: Student attempts to delete another user (expect 403)",
+               token=student_token, expected=(403,),
+               note="Expected 403 ACCESS_DENIED — only admins can delete users")
+
+        # 7.7 Non-admin attempts to update another user's profile -> 403
+        r.step("PUT", f"/users/{user_id}",
+               title="Negative: Student attempts to update another user (expect 403)",
+               token=student_token, json_body={"firstName": "HackedName"}, expected=(403,),
+               note="Expected 403 ACCESS_DENIED — non-admins cannot modify others")
+
+        # 7.8 Non-admin attempts to change another user's password -> 403
+        r.step("PATCH", f"/users/{user_id}",
+               title="Negative: Student attempts to change another user's password (expect 403)",
+               token=student_token, json_body={"password": "hackedPassword!"}, expected=(403,),
+               note="Expected 403 ACCESS_DENIED — non-admins cannot change others' password")
+
+        # 7.9 Non-admin student requests 'rooms' in RBAC matrix -> 403
+        r.step("POST", "/authorize",
+               title="Negative: Student requests 'rooms' resource (expect 403)",
+               token=student_token, json_body={"resource": "rooms"}, expected=(403,),
+               note="Expected 403 ACCESS_DENIED — student does not possess administrator role")
+
+    # =========================================================================
+    # Section 8: Session Renewal & Token Expiry
+    # =========================================================================
+    r.section("8. Session Renewal & Refresh Token Errors")
+
+    # 8.1 Negative: Refresh with invalid refresh token -> 401 INVALID_TOKEN
+    r.step("POST", "/refresh", title="Negative: Refresh with invalid token (expect 401)",
+           json_body={"refresh_token": "bogus-refresh-token"}, expected=(401,),
+           note="Expected 401 INVALID_TOKEN — security validation")
+
+    # 8.2 Positive: Refresh with valid refresh token -> 200
+    refreshed = r.step("POST", "/refresh", title="Renew the session using valid refresh token",
                         json_body={"refresh_token": refresh_token})
     if refreshed.status == 200 and refreshed.body:
         access_token = refreshed.body["access_token"]
 
-    # 20-22. Cleanup: unassign + soft-delete -----------------------------------
+    # =========================================================================
+    # Section 9: Cleanup: Unassign & Soft-Delete (as Admin)
+    # =========================================================================
+    r.section("9. Cleanup: Unassign Roles & Soft-Delete Entities")
     if user_id and role_id:
         r.step("DELETE", f"/users/{user_id}/roles/{role_id}", title="Unassign the demo role from the demo user",
                token=access_token, expected=(204,))
@@ -320,10 +490,13 @@ def run(base_url: str, delay: float, color: bool) -> int:
         r.step("DELETE", f"/roles/{role_id}", title="Soft-delete the demo role", token=access_token,
                expected=(204,))
     if user_id:
-        r.step("DELETE", f"/users/{user_id}", title="Soft-delete the demo user (enabled=false, not a hard delete)",
+        r.step("DELETE", f"/users/{user_id}", title="Soft-delete the demo user (enabled=false)",
                token=access_token, expected=(204,))
 
-    # 23-25. Observability & docs ------------------------------------------------
+    # =========================================================================
+    # Section 10: Observability & Documentation
+    # =========================================================================
+    r.section("10. Observability & API Documentation")
     r.step("GET", "/metrics", title="Prometheus exposition — request counters & durations")
     r.step("GET", "/docs", title="Swagger UI (HTML)")
     r.step("GET", "/docs/openapi.json", title="Code-generated OpenAPI spec")

@@ -142,71 +142,95 @@ final class KeycloakUserAdapterTest extends TestCase
     public function testListActiveUsersFiltersOutDisabledUsers(): void
     {
         $this->httpClient
-            ->expects($this->once())
+            ->expects($this->exactly(3))
             ->method('requestAdmin')
-            ->with('GET', 'admin/realms/constrsw/users')
-            ->willReturn([
-                'status' => 200,
-                'data' => [
-                    [
-                        'id' => 'active-1',
-                        'username' => 'active1@example.com',
-                        'email' => 'active1@example.com',
-                        'firstName' => 'Active',
-                        'lastName' => 'One',
-                        'enabled' => true,
-                    ],
-                    [
-                        'id' => 'disabled-2',
-                        'username' => 'disabled@example.com',
-                        'email' => 'disabled@example.com',
-                        'firstName' => 'Disabled',
-                        'lastName' => 'Two',
-                        'enabled' => false,
-                    ],
-                    [
-                        'id' => 'active-3',
-                        'username' => 'active3@example.com',
-                        'email' => 'active3@example.com',
-                        'firstName' => 'Active',
-                        'lastName' => 'Three',
-                        'enabled' => true,
-                    ],
-                ],
-                'raw' => '',
-            ]);
+            ->willReturnCallback(function (string $method, string $path) {
+                if ($method === 'GET' && $path === 'admin/realms/constrsw/users') {
+                    return [
+                        'status' => 200,
+                        'data' => [
+                            [
+                                'id' => 'active-1',
+                                'username' => 'active1@example.com',
+                                'email' => 'active1@example.com',
+                                'firstName' => 'Active',
+                                'lastName' => 'One',
+                                'enabled' => true,
+                            ],
+                            [
+                                'id' => 'disabled-2',
+                                'username' => 'disabled@example.com',
+                                'email' => 'disabled@example.com',
+                                'firstName' => 'Disabled',
+                                'lastName' => 'Two',
+                                'enabled' => false,
+                            ],
+                            [
+                                'id' => 'active-3',
+                                'username' => 'active3@example.com',
+                                'email' => 'active3@example.com',
+                                'firstName' => 'Active',
+                                'lastName' => 'Three',
+                                'enabled' => true,
+                            ],
+                        ],
+                        'raw' => '',
+                    ];
+                }
+
+                if ($method === 'GET' && str_contains($path, 'role-mappings/realm')) {
+                    return ['status' => 200, 'headers' => [], 'data' => [['name' => 'student']], 'raw' => ''];
+                }
+
+                $this->fail("Chamada inesperada: {$method} {$path}");
+            });
 
         $users = $this->adapter->listActiveUsers();
 
         $this->assertCount(2, $users);
         $this->assertSame('active-1', $users[0]->id);
         $this->assertSame('active-3', $users[1]->id);
+        $this->assertSame(['student'], $users[0]->roles);
     }
 
     public function testGetUserByIdSuccess(): void
     {
         $this->httpClient
-            ->expects($this->once())
+            ->expects($this->exactly(2))
             ->method('requestAdmin')
-            ->with('GET', 'admin/realms/constrsw/users/uuid-target')
-            ->willReturn([
-                'status' => 200,
-                'data' => [
-                    'id' => 'uuid-target',
-                    'username' => 'user@example.com',
-                    'email' => 'user@example.com',
-                    'firstName' => 'First',
-                    'lastName' => 'Last',
-                    'enabled' => true,
-                ],
-                'raw' => '',
-            ]);
+            ->willReturnCallback(function (string $method, string $path) {
+                if ($method === 'GET' && $path === 'admin/realms/constrsw/users/uuid-target') {
+                    return [
+                        'status' => 200,
+                        'data' => [
+                            'id' => 'uuid-target',
+                            'username' => 'user@example.com',
+                            'email' => 'user@example.com',
+                            'firstName' => 'First',
+                            'lastName' => 'Last',
+                            'enabled' => true,
+                        ],
+                        'raw' => '',
+                    ];
+                }
+
+                if ($method === 'GET' && $path === 'admin/realms/constrsw/users/uuid-target/role-mappings/realm') {
+                    return [
+                        'status' => 200,
+                        'data' => [['name' => 'administrator']],
+                        'raw' => '',
+                    ];
+                }
+
+                $this->fail("Chamada inesperada: {$method} {$path}");
+            });
 
         $user = $this->adapter->getUserById('uuid-target');
 
         $this->assertNotNull($user);
         $this->assertSame('uuid-target', $user->id);
         $this->assertSame('user@example.com', $user->email);
+        $this->assertSame(['administrator'], $user->roles);
     }
 
     public function testGetUserByIdReturnsNullWhenNotFound(): void

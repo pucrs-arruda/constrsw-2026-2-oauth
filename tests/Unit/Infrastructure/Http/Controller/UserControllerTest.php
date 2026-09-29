@@ -179,4 +179,103 @@ final class UserControllerTest extends TestCase
         $this->assertSame(Response::HTTP_NO_CONTENT, $response->getStatusCode());
         $this->assertSame('', (string) $response->getContent());
     }
+
+    public function testCreateThrowsWhenGuardRejects(): void
+    {
+        $guard = $this->createMock(\App\Infrastructure\Http\Security\AdminAuthorizationGuardInterface::class);
+        $guard->expects($this->once())
+            ->method('requireAdmin')
+            ->willThrowException(new \App\Domain\Exception\AccessDeniedException('Acesso negado'));
+
+        $controller = new UserController(
+            $this->createUserUseCase,
+            $this->listUsersUseCase,
+            $this->getUserByIdUseCase,
+            $this->updateUserUseCase,
+            $this->updatePasswordUseCase,
+            $this->disableUserUseCase,
+            $guard
+        );
+
+        $request = new Request(content: json_encode([
+            'email' => 'test@pucrs.br',
+            'firstName' => 'A',
+            'lastName' => 'B',
+            'password' => 'secret',
+        ], JSON_THROW_ON_ERROR));
+
+        $this->expectException(\App\Domain\Exception\AccessDeniedException::class);
+        $controller->create($request);
+    }
+
+    public function testUpdateThrowsWhenGuardRejects(): void
+    {
+        $guard = $this->createMock(\App\Infrastructure\Http\Security\AdminAuthorizationGuardInterface::class);
+        $guard->expects($this->once())
+            ->method('requireAdminOrSelf')
+            ->with($this->isInstanceOf(Request::class), 'other-user')
+            ->willThrowException(new \App\Domain\Exception\AccessDeniedException('Acesso negado'));
+
+        $controller = new UserController(
+            $this->createUserUseCase,
+            $this->listUsersUseCase,
+            $this->getUserByIdUseCase,
+            $this->updateUserUseCase,
+            $this->updatePasswordUseCase,
+            $this->disableUserUseCase,
+            $guard
+        );
+
+        $request = new Request(content: json_encode(['firstName' => 'X'], JSON_THROW_ON_ERROR));
+
+        $this->expectException(\App\Domain\Exception\AccessDeniedException::class);
+        $controller->update('other-user', $request);
+    }
+
+    public function testPasswordThrowsWhenGuardRejects(): void
+    {
+        $guard = $this->createMock(\App\Infrastructure\Http\Security\AdminAuthorizationGuardInterface::class);
+        $guard->expects($this->once())
+            ->method('requireAdminOrSelf')
+            ->with($this->isInstanceOf(Request::class), 'other-user')
+            ->willThrowException(new \App\Domain\Exception\AccessDeniedException('Acesso negado'));
+
+        $controller = new UserController(
+            $this->createUserUseCase,
+            $this->listUsersUseCase,
+            $this->getUserByIdUseCase,
+            $this->updateUserUseCase,
+            $this->updatePasswordUseCase,
+            $this->disableUserUseCase,
+            $guard
+        );
+
+        $request = new Request(content: json_encode(['password' => 'new123'], JSON_THROW_ON_ERROR));
+
+        $this->expectException(\App\Domain\Exception\AccessDeniedException::class);
+        $controller->password('other-user', $request);
+    }
+
+    public function testDeleteThrowsWhenGuardRejects(): void
+    {
+        $guard = $this->createMock(\App\Infrastructure\Http\Security\AdminAuthorizationGuardInterface::class);
+        $guard->expects($this->once())
+            ->method('requireAdmin')
+            ->willThrowException(new \App\Domain\Exception\AccessDeniedException('Acesso negado'));
+
+        $controller = new UserController(
+            $this->createUserUseCase,
+            $this->listUsersUseCase,
+            $this->getUserByIdUseCase,
+            $this->updateUserUseCase,
+            $this->updatePasswordUseCase,
+            $this->disableUserUseCase,
+            $guard
+        );
+
+        $request = new Request();
+
+        $this->expectException(\App\Domain\Exception\AccessDeniedException::class);
+        $controller->delete('other-user', $request);
+    }
 }

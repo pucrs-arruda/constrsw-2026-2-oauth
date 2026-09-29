@@ -29,4 +29,9 @@ interface KeycloakRolePortInterface
     public function assignRoleToUser(string $userId, string $roleIdentifier): array;
 
     public function removeRoleFromUser(string $userId, string $roleIdentifier): void;
+
+    /**
+     * @return string[]
+     */
+    public function getUserRoles(string $userId): array;
 }

@@ -93,13 +93,16 @@ final class KeycloakUserAdapter implements KeycloakUserPortInterface
                 continue;
             }
 
-            $activeUsers[] = $this->mapUserRepresentationToDTO($userData);
+            $userId = (string) ($userData['id'] ?? '');
+            $roles = $userId !== '' ? $this->fetchUserRoles($userId) : [];
+
+            $activeUsers[] = $this->mapUserRepresentationToDTO($userData, $roles);
         }
 
         return $activeUsers;
     }
 
-    public function getUserById(string $id): ?UserDTO
+    public function getUserById(string $id, bool $fetchRoles = true): ?UserDTO
     {
         try {
             $response = $this->httpClient->requestAdmin('GET', $this->userAdminPath($id));
@@ -111,12 +114,15 @@ final class KeycloakUserAdapter implements KeycloakUserPortInterface
             return null;
         }
 
-        return $this->mapUserRepresentationToDTO($response['data']);
+        $userId = (string) ($response['data']['id'] ?? $id);
+        $roles = $fetchRoles ? $this->fetchUserRoles($userId) : [];
+
+        return $this->mapUserRepresentationToDTO($response['data'], $roles);
     }
 
     public function updateUser(string $id, UpdateUserDTO $dto): void
     {
-        $existing = $this->getUserById($id);
+        $existing = $this->getUserById($id, false);
         if ($existing === null) {
             throw new UserNotFoundException();
         }
@@ -141,7 +147,7 @@ final class KeycloakUserAdapter implements KeycloakUserPortInterface
 
     public function updatePassword(string $id, UpdatePasswordDTO $dto): void
     {
-        $existing = $this->getUserById($id);
+        $existing = $this->getUserById($id, false);
         if ($existing === null) {
             throw new UserNotFoundException();
         }
@@ -162,7 +168,7 @@ final class KeycloakUserAdapter implements KeycloakUserPortInterface
 
     public function disableUser(string $id): void
     {
-        $existing = $this->getUserById($id);
+        $existing = $this->getUserById($id, false);
         if ($existing === null) {
             throw new UserNotFoundException();
         }
@@ -210,8 +216,29 @@ final class KeycloakUserAdapter implements KeycloakUserPortInterface
         return null;
     }
 
-    private function mapUserRepresentationToDTO(array $data): UserDTO
+    public function fetchUserRoles(string $userId): array
     {
+        $path = sprintf('admin/realms/%s/users/%s/role-mappings/realm', $this->httpClient->getRealm(), rawurlencode($userId));
+        $response = $this->httpClient->requestAdmin('GET', $path, [], null, false);
+
+        if ($response['status'] !== 200 || !is_array($response['data'])) {
+            return [];
+        }
+
+        $roles = [];
+        foreach ($response['data'] as $role) {
+            if (is_array($role) && !empty($role['name'])) {
+                $roles[] = (string) $role['name'];
+            }
+        }
+
+        return array_values(array_unique($roles));
+    }
+
+    private function mapUserRepresentationToDTO(array $data, array $roles = []): UserDTO
+    {
+        $assignedRoles = !empty($roles) ? $roles : (array) ($data['realmRoles'] ?? $data['roles'] ?? []);
+
         return new UserDTO(
             id: (string) ($data['id'] ?? ''),
             username: (string) ($data['username'] ?? ''),
@@ -219,7 +246,7 @@ final class KeycloakUserAdapter implements KeycloakUserPortInterface
             firstName: (string) ($data['firstName'] ?? ''),
             lastName: (string) ($data['lastName'] ?? ''),
             enabled: (bool) ($data['enabled'] ?? true),
-            roles: (array) ($data['realmRoles'] ?? $data['roles'] ?? [])
+            roles: array_values(array_unique($assignedRoles))
         );
     }
 

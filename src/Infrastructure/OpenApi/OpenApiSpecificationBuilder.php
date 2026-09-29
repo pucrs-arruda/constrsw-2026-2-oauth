@@ -660,6 +660,12 @@ final class OpenApiSpecificationBuilder
                         'type' => 'string',
                         'example' => 'professor',
                     ],
+                    'roles' => [
+                        'type' => 'array',
+                        'description' => 'Lista atualizada de papéis associados ao usuário.',
+                        'items' => ['type' => 'string'],
+                        'example' => ['default-roles-construcao-sw', 'professor'],
+                    ],
                 ],
             ],
             'AuthorizeRequest' => [

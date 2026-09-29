@@ -14,12 +14,34 @@ final class AssignRoleDTO
 
     public static function fromArray(array $data): self
     {
-        $name = isset($data['name']) && trim((string) $data['name']) !== ''
-            ? trim((string) $data['name'])
-            : (isset($data['roleName']) && trim((string) $data['roleName']) !== '' ? trim((string) $data['roleName']) : null);
+        $roleId = $data['roleId'] ?? $data['role_id'] ?? $data['id'] ?? null;
+        if ($roleId !== null) {
+            $roleId = trim((string) $roleId);
+            if ($roleId === '') {
+                $roleId = null;
+            }
+        }
+
+        $name = $data['name'] ?? $data['roleName'] ?? $data['role_name'] ?? $data['role'] ?? null;
+        if ($name !== null) {
+            $name = trim((string) $name);
+            if ($name === '') {
+                $name = null;
+            }
+        }
+
+        if ($roleId === null && $name === null && isset($data['roles']) && is_array($data['roles']) && !empty($data['roles'])) {
+            $first = $data['roles'][0];
+            if (is_string($first)) {
+                $name = trim($first);
+            } elseif (is_array($first)) {
+                $roleId = isset($first['id']) ? trim((string) $first['id']) : (isset($first['roleId']) ? trim((string) $first['roleId']) : null);
+                $name = isset($first['name']) ? trim((string) $first['name']) : (isset($first['roleName']) ? trim((string) $first['roleName']) : null);
+            }
+        }
 
         return new self(
-            roleId: isset($data['roleId']) && trim((string) $data['roleId']) !== '' ? trim((string) $data['roleId']) : null,
+            roleId: $roleId,
             name: $name
         );
     }

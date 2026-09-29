@@ -12,9 +12,11 @@ use App\Domain\Port\Inbound\AssignUserRoleUseCaseInterface;
 use App\Domain\Port\Inbound\CreateRoleUseCaseInterface;
 use App\Domain\Port\Inbound\DeleteRoleUseCaseInterface;
 use App\Domain\Port\Inbound\GetRoleByIdUseCaseInterface;
+use App\Domain\Port\Inbound\GetUserRolesUseCaseInterface;
 use App\Domain\Port\Inbound\ListRolesUseCaseInterface;
 use App\Domain\Port\Inbound\UnassignUserRoleUseCaseInterface;
 use App\Domain\Port\Inbound\UpdateRoleUseCaseInterface;
+use App\Infrastructure\Http\Security\AdminAuthorizationGuardInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -29,13 +31,17 @@ final class RoleController extends AbstractController
         private readonly UpdateRoleUseCaseInterface $updateRoleUseCase,
         private readonly DeleteRoleUseCaseInterface $deleteRoleUseCase,
         private readonly AssignUserRoleUseCaseInterface $assignUserRoleUseCase,
-        private readonly UnassignUserRoleUseCaseInterface $unassignUserRoleUseCase
+        private readonly UnassignUserRoleUseCaseInterface $unassignUserRoleUseCase,
+        private readonly GetUserRolesUseCaseInterface $getUserRolesUseCase,
+        private readonly ?AdminAuthorizationGuardInterface $guard = null
     ) {
     }
 
     #[Route('/roles', name: 'role_create', methods: ['POST'])]
     public function create(Request $request): JsonResponse
     {
+        $this->guard?->requireAdmin($request);
+
         $data = $this->extractRequestData($request);
         $dto = CreateRoleDTO::fromArray($data);
         $createdRole = $this->createRoleUseCase->execute($dto);
@@ -63,6 +69,8 @@ final class RoleController extends AbstractController
     #[Route('/roles/{id}', name: 'role_update', methods: ['PUT'])]
     public function update(string $id, Request $request): JsonResponse
     {
+        $this->guard?->requireAdmin($request);
+
         $data = $this->extractRequestData($request);
         $dto = UpdateRoleDTO::fromArray($data);
         $updatedRole = $this->updateRoleUseCase->execute($id, $dto, false);
@@ -73,6 +81,8 @@ final class RoleController extends AbstractController
     #[Route('/roles/{id}', name: 'role_patch', methods: ['PATCH'])]
     public function patch(string $id, Request $request): JsonResponse
     {
+        $this->guard?->requireAdmin($request);
+
         $data = $this->extractRequestData($request);
         $dto = UpdateRoleDTO::fromArray($data);
         $updatedRole = $this->updateRoleUseCase->execute($id, $dto, true);
@@ -81,16 +91,37 @@ final class RoleController extends AbstractController
     }
 
     #[Route('/roles/{id}', name: 'role_delete', methods: ['DELETE'])]
-    public function delete(string $id): JsonResponse
+    public function delete(string $id, ?Request $request = null): JsonResponse
     {
+        if ($request !== null) {
+            $this->guard?->requireAdmin($request);
+        }
+
         $this->deleteRoleUseCase->execute($id);
 
         return new JsonResponse(null, JsonResponse::HTTP_NO_CONTENT);
     }
 
+    #[Route('/users/{userId}/roles', name: 'user_role_list', methods: ['GET'])]
+    public function listUserRoles(string $userId, ?Request $request = null): JsonResponse
+    {
+        if ($request !== null) {
+            $this->guard?->requireAdminOrSelf($request, $userId);
+        }
+
+        $roles = $this->getUserRolesUseCase->execute($userId);
+
+        return new JsonResponse([
+            'userId' => $userId,
+            'roles' => $roles,
+        ], JsonResponse::HTTP_OK);
+    }
+
     #[Route('/users/{userId}/roles', name: 'user_role_assign', methods: ['POST'])]
     public function assignRole(string $userId, Request $request): JsonResponse
     {
+        $this->guard?->requireAdmin($request);
+
         $data = $this->extractRequestData($request);
         $dto = AssignRoleDTO::fromArray($data);
         $result = $this->assignUserRoleUseCase->execute($userId, $dto);
@@ -98,9 +129,26 @@ final class RoleController extends AbstractController
         return new JsonResponse($result, JsonResponse::HTTP_OK);
     }
 
-    #[Route('/users/{userId}/roles/{roleId}', name: 'user_role_unassign', methods: ['DELETE'])]
-    public function unassignRole(string $userId, string $roleId): JsonResponse
+    #[Route('/users/{userId}/roles/{roleId}', name: 'user_role_assign_path', methods: ['POST'])]
+    public function assignRoleByPath(string $userId, string $roleId, ?Request $request = null): JsonResponse
     {
+        if ($request !== null) {
+            $this->guard?->requireAdmin($request);
+        }
+
+        $dto = new AssignRoleDTO(roleId: $roleId);
+        $result = $this->assignUserRoleUseCase->execute($userId, $dto);
+
+        return new JsonResponse($result, JsonResponse::HTTP_OK);
+    }
+
+    #[Route('/users/{userId}/roles/{roleId}', name: 'user_role_unassign', methods: ['DELETE'])]
+    public function unassignRole(string $userId, string $roleId, ?Request $request = null): JsonResponse
+    {
+        if ($request !== null) {
+            $this->guard?->requireAdmin($request);
+        }
+
         $this->unassignUserRoleUseCase->execute($userId, $roleId);
 
         return new JsonResponse(null, JsonResponse::HTTP_NO_CONTENT);

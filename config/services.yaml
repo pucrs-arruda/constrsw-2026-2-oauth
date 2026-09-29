@@ -69,9 +69,17 @@ services:
     App\Domain\Port\Inbound\DeleteRoleUseCaseInterface: '@App\Application\UseCase\Role\DeleteRoleUseCase'
     App\Domain\Port\Inbound\AssignUserRoleUseCaseInterface: '@App\Application\UseCase\Role\AssignUserRoleUseCase'
     App\Domain\Port\Inbound\UnassignUserRoleUseCaseInterface: '@App\Application\UseCase\Role\UnassignUserRoleUseCase'
+    App\Domain\Port\Inbound\GetUserRolesUseCaseInterface: '@App\Application\UseCase\Role\GetUserRolesUseCase'
 
     # Outbound Ports (Adapters) - Épico 6
     App\Domain\Port\Outbound\KeycloakRolePortInterface: '@App\Infrastructure\Keycloak\Adapter\KeycloakRoleAdapter'
+
+    # Security Guard
+    App\Infrastructure\Http\Security\AdminAuthorizationGuard:
+        arguments:
+            $appEnv: '%kernel.environment%'
+
+    App\Infrastructure\Http\Security\AdminAuthorizationGuardInterface: '@App\Infrastructure\Http\Security\AdminAuthorizationGuard'
 
 
 
