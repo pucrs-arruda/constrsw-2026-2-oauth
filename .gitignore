@@ -1,9 +1,13 @@
 # Environment files and local secrets
 .env
-.env.local
-.env.*.local
+.env.*
 !.env.example
 !.env.template
+
+# Bruno environments contain local credentials and session state
+/bruno/environments/Local.bru
+/bruno/environments/*.local.bru
+/bruno/results/
 
 # Java and Maven build output
 target/
@@ -52,3 +56,6 @@ Thumbs.db
 Desktop.ini
 *.swp
 *.swo
+*~
+*.tmp
+*.bak

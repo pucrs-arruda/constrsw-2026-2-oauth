@@ -6,10 +6,9 @@
 # em vez de digitar cada curl na mao.
 #
 # Uso:
-#   ./scripts/demo-e2e.sh                # so os testes funcionais (rapido)
-#   ./scripts/demo-e2e.sh --with-alert    # tambem gera trafego de forca
-#                                         # bruta pra disparar o alerta no
-#                                         # Alertmanager (leva ~2min)
+#   ./scripts/demo-e2e.sh
+#
+# Para disparar o alerta de forca bruta, use ./scripts/trigger-login-alert.sh.
 #
 # Pre-requisito: stack no ar (ver README / runbook) e `python3` disponivel
 # no PATH (usado so pra parsear o JSON do token, sem dependencias extras).
@@ -21,9 +20,6 @@ ADMIN_USER="admin@pucrs.br"
 ADMIN_PASS="a12345678"
 STUDENT_USER="student@pucrs.br"
 STUDENT_PASS="a12345678"
-
-WITH_ALERT=0
-[[ "${1:-}" == "--with-alert" ]] && WITH_ALERT=1
 
 # --- cores ---------------------------------------------------------------
 RED=$'\033[0;31m'; GREEN=$'\033[0;32m'; YELLOW=$'\033[0;33m'
@@ -147,24 +143,5 @@ echo "  Alertmanager         → ${OAUTH_URL/8181/9093}"
 echo
 echo "Cada requisição que acabou de rodar já apareceu nas métricas — é só abrir"
 echo "o Grafana e apontar pro painel 'Requisições por status HTTP' se mexendo."
-
-# --- opcional: gera trafego pra disparar o alerta de forca bruta -------------
-if [[ "$WITH_ALERT" -eq 1 ]]; then
-  section "Gerando tráfego de força bruta (--with-alert)"
-  say "Isso vai rodar por um tempo, gerando ~75% de falha de login."
-  say "O alerta HighLoginFailureRatio precisa de 2 minutos de condição sustentada pra disparar."
-  say "Deixe rodando em segundo plano e continue a apresentação — ele dispara sozinho."
-  echo
-  for i in $(seq 1 40); do
-    curl -s -o /dev/null -X POST "${OAUTH_URL}/login" -d "username=${ADMIN_USER}&password=errada${i}"
-    if (( i % 3 == 0 )); then
-      curl -s -o /dev/null -X POST "${OAUTH_URL}/login" -d "username=${ADMIN_USER}&password=${ADMIN_PASS}"
-    fi
-    printf "."
-    sleep 1
-  done
-  echo
-  say "Tráfego gerado. Acompanhe em ${OAUTH_URL/8181/9090}/alerts (pending → firing) e depois em ${OAUTH_URL/8181/9093}."
-fi
 
 [[ "$FAIL_COUNT" -eq 0 ]] && exit 0 || exit 1

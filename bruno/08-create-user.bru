@@ -28,7 +28,6 @@ script:post-response {
   if (res.getStatus() === 201) {
     const id = res.getBody().id;
     bru.setVar("user_id", id);
-    bru.setEnvVar("user_id", id);
   }
 }
 

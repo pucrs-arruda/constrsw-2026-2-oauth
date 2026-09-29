@@ -21,6 +21,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -166,6 +167,32 @@ class AuthControllerTest {
                         .content("{\"username\":\"lucas@example.com\",\"password\":\"senha\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error_code").value("OA-400"))
+                .andExpect(jsonPath("$.error_stack[0].message").exists());
+
+        verify(authService, never()).login(any());
+    }
+
+    @Test
+    void metodoNaoSuportadoRetorna405NoContratoDeErro() throws Exception {
+        mockMvc.perform(get("/login"))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(header().string("Allow", "POST"))
+                .andExpect(jsonPath("$.error_code").value("OA-405"))
+                .andExpect(jsonPath("$.error_source").value("OAuthAPI"))
+                .andExpect(jsonPath("$.error_stack[0].message").exists());
+    }
+
+    @Test
+    void acceptNaoSuportadoRetorna406NoContratoDeErro() throws Exception {
+        mockMvc.perform(post("/login")
+                        .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                        .accept(MediaType.APPLICATION_XML)
+                        .param("username", "lucas@example.com")
+                        .param("password", "senha"))
+                .andExpect(status().isNotAcceptable())
+                .andExpect(header().string("Content-Type", MediaType.APPLICATION_JSON_VALUE))
+                .andExpect(jsonPath("$.error_code").value("OA-406"))
+                .andExpect(jsonPath("$.error_source").value("OAuthAPI"))
                 .andExpect(jsonPath("$.error_stack[0].message").exists());
 
         verify(authService, never()).login(any());

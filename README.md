@@ -382,7 +382,8 @@ mvn clean test
 A pasta [`bruno/`](./bruno/) contém **19 requisições organizadas e encadeadas**, validando todo o fluxo da API de forma automatizada:
 ```bash
 cd <caminho-para>/constru-sw-2026-2/backend/oauth/bruno
-npx --yes @usebruno/cli run --env Local
+cp -n environments/Local.bru.example environments/Local.bru
+npx --yes @usebruno/cli@4.1.0 run --env Local --bail
 ```
 * **Resultado:** **19/19 testes aprovados (`✓ PASS`)**, validando:
   * Autenticação via `application/x-www-form-urlencoded` e `multipart/form-data`.

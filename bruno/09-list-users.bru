@@ -21,7 +21,6 @@ script:post-response {
       const pessoa4 = users.find(function (u) { return u.username === "pessoa4.user@example.com"; });
       if (pessoa4) {
         bru.setVar("user_id", pessoa4.id);
-        bru.setEnvVar("user_id", pessoa4.id);
       }
     }
   }

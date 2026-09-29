@@ -92,16 +92,29 @@ O motivo é direto: o Prometheus não é uma ferramenta de dashboard. A [documen
 
 ### Painéis do dashboard
 
-| Painel | O que mostra | Por que importa |
+O dashboard (`grafana/dashboards/oauth-overview.json`) é organizado em seções que contam uma história:
+
+| Seção | Painéis | Por que importa |
 | --- | --- | --- |
-| Status oauth / keycloak | `up == 1` ou `0` | Prova visual de que o serviço está de pé |
-| Requisições/s | Throughput da API | Tráfego real sendo processado |
-| Requisições por status HTTP | Série de 200, 401, 403, 500... | Saúde geral — muitos 5xx é problema |
-| Latência p95 / p99 por endpoint | Pior caso de tempo de resposta | Média esconde outliers; p95/p99 é o que afeta usuários de verdade |
-| Taxa de erro % | % de 4xx/5xx sobre o total | Um dos "four golden signals" de SRE |
-| 401 vs 403 ao longo do tempo | Tentativas sem token vs. sem permissão | Prova ao vivo de que o RBAC funciona |
-| Login sucesso vs. falha | Contador customizado (métrica própria) | Não é genérico do framework — fomos nós que decidimos medir isso |
-| Operações de gestão | Usuário/role criado, deletado, atribuído... | Rastreabilidade de auditoria |
+| **Visão executiva** | Status oauth/keycloak, disponibilidade contra o SLO de 99,5%, error budget restante, latência p95, Apdex (T = 250 ms), req/s, alertas disparando | Responde em 5 segundos se o serviço está saudável, na linguagem de SRE (SLO/error budget/Apdex) |
+| **A nossa aposta** | Tokens validados localmente × buscas de JWKS no Keycloak, chamadas evitadas, % de economia, razão entre tempos médios, custo por requisição (validação local × ida ao Keycloak, escala log) | **Indicadores da decisão de arquitetura**: estimam chamadas de validação evitadas e comparam tempos médios de operações diferentes; não medem um ganho fixo de desempenho |
+| **Tráfego e latência** | Req/s por endpoint, respostas por status (2xx/4xx/5xx em cores), p50/p95/p99, heatmap de latência, ranking de endpoints (req/s, p95, taxa de erro) | Mostra outliers que a média esconde e qual rota pesa mais |
+| **Dependência Keycloak** | Onde o tempo de cada requisição é gasto (nossa API × espera pelo Keycloak), p95 por operação da Admin API, status que o Keycloak devolve ao adapter | Mostra que o overhead do adapter é pequeno e que o gargalo está na dependência |
+| **Segurança** | Login sucesso × falha, gauge de taxa de falha (alerta em 50%), 401 × 403, linha do tempo dos alertas (pending/firing), tokens rejeitados por motivo | Força bruta, RBAC e alertas visíveis em tempo real |
+| **Auditoria** | Total por operação (usuários criados/desabilitados, roles criadas/atribuídas...) e série temporal | Contagens agregadas a partir de métricas de negócio próprias, sem identificação do autor |
+| **Runtime JVM** (recolhida) | Heap, CPU, GC e threads | Diagnóstico de infraestrutura quando precisar |
+
+Alertas disparados aparecem como **anotações vermelhas** em todos os gráficos, e o topo do dashboard tem links para Swagger, Prometheus e Alertmanager.
+
+As métricas `http_client_requests_seconds` (chamadas ao Keycloak) só existem porque o `WebClientConfig` passou a usar o `WebClient.Builder` instrumentado do Spring Boot. Os buckets fixos de 100 ms/250 ms/1 s (`management.metrics.distribution.slo`) alimentam o Apdex.
+
+Scripts para a apresentação (em `scripts/`):
+
+| Script | O que faz |
+| --- | --- |
+| `demo-e2e.sh` | Fluxo guiado com PASS/FAIL: health, 401, login admin (201), student (403), CRUD de role |
+| `generate-traffic.sh [segundos]` | Tráfego variado (CRUD, 401, 403, 404, 409, logins) que deixa todos os gráficos vivos |
+| `trigger-login-alert.sh [segundos]` | Simula força bruta no `/login` e acompanha o `HighLoginFailureRatio` até virar firing (~3 min). Usa um usuário inexistente para o Keycloak não bloquear o admin |
 
 Acesso: `http://localhost:3300`, login `admin` / `admin`.
 
