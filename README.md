@@ -62,9 +62,75 @@ docker compose up -d
 
 ---
 
+## Observability: Prometheus & Grafana Setup
+
+### 1. Changes made in the `base` repository (Prometheus)
+
+In the root monorepo (`base`), Prometheus is configured via `infrastructure/dev.local/services/prometheus/prometheus.yml`. Two essential updates were made to scrape this service:
+
+1. **Scrape Target Configuration:**
+   Replaced the legacy job (`auth:9464`) with the PHP/Symfony OAuth service target running on the internal Docker network (`oauth:3001`):
+   ```yaml
+   # infrastructure/dev.local/services/prometheus/prometheus.yml
+   - job_name: 'oauth'
+     metrics_path: '/metrics'
+     scrape_interval: 10s
+     static_configs:
+       - targets: ['oauth:3001']
+         labels:
+           service: 'oauth'
+           environment: 'dev'
+   ```
+2. **Health Check Probing:**
+   Added `http://oauth:3001/health` to the blackbox probe targets to monitor container liveness.
+
+You can verify Prometheus is actively scraping the service by opening `http://localhost:9090/targets` — the `oauth` job should report state **UP (1/1)**.
+
+---
+
+### 2. How to use Grafana with our Dashboard (`.json`)
+
+A production-ready dashboard with **16 panels** is included in [`docs/monitoring/grafana-dashboard.json`](docs/monitoring/grafana-dashboard.json). It visualizes RED metrics (Rate, Errors, Duration), business KPIs (Logins, Refreshes, RBAC Authorizations), and PHP runtime health.
+
+#### Step-by-step Import Guide:
+
+1. **Access Grafana:**
+   Open [http://localhost:3300](http://localhost:3300) in your browser.
+   - Default credentials: `admin` / `admin` (skip password reset if prompted).
+
+2. **Navigate to Import:**
+   - In the left sidebar, click **Dashboards** (or the four-squares icon).
+   - Click **New** (top-right button) → **Import** (or go directly to [http://localhost:3300/dashboard/import](http://localhost:3300/dashboard/import)).
+
+3. **Upload the JSON File:**
+   - Click the blue **Upload dashboard JSON file** button.
+   - Select the file: `backend/oauth/docs/monitoring/grafana-dashboard.json`.
+   - *Alternative:* Open `grafana-dashboard.json`, copy the entire raw JSON contents, paste it into the **Import via panel json** text area, and click **Load**.
+
+4. **Select Datasource & Finish:**
+   - Under the **Prometheus** dropdown at the bottom, select the provisioned Prometheus datasource (e.g., `Prometheus`).
+   - Click **Import**.
+
+5. **Generate Traffic:**
+   To see live data populate across all 16 panels immediately, run the full smoke test:
+   ```bash
+   python3 scripts/smoke_test.py --delay 0
+   ```
+   Refresh Grafana or set the auto-refresh to **5s** in the top-right corner.
+
+#### What the Dashboard Monitors:
+* **System & Runtime:** Service status (`UP`), Current RAM memory allocation, Peak RAM memory, PHP Version & SAPI.
+* **Traffic & RED Metrics:** Total HTTP Request Rate (`req/s`), HTTP Status code distribution (2xx, 4xx, 5xx), Request Duration / Latency per route.
+* **Security & Business Activity:**
+  - Login Attempts: Successful logins vs. Failed attempts (brute-force detection).
+  - Token Refreshes: Session renewal volume.
+  - RBAC Policy Authorization: Requests granted (`200 OK`) vs. denied (`403 Forbidden`).
+
+---
+
 ## Full-flow smoke test
 
-[`scripts/smoke_test.py`](scripts/smoke_test.py) exercises **every endpoint in this service, in the correct dependency order**, against a real running stack — no mocks. Zero dependencies beyond the Python 3 standard library, so it runs anywhere without a `pip install`.
+[`scripts/smoke_test.py`](scripts/smoke_test.py) exercises **every endpoint in this service, in the correct dependency order**, against a real running stack — testing both happy paths and failure modes (400, 401, 403, 404, 409). Zero dependencies beyond the Python 3 standard library, so it runs anywhere without a `pip install`.
 
 ```bash
 # with the stack up (docker compose up -d from the base repo root)
@@ -73,9 +139,19 @@ python3 scripts/smoke_test.py --delay 2               # slower, easier for an au
 python3 scripts/smoke_test.py --delay 0 --no-color    # fast, plain output — good for CI/logs
 ```
 
-For each of the 25 calls it prints the method + path, a one-line description, the HTTP status (color-coded), response time, and a pretty-printed preview of the body (long values like JWTs are truncated so the terminal stays readable) — then a pass/fail summary at the end.
+For each of the 44 checks it prints the method + path, a one-line description, the HTTP status (color-coded), response time, and a pretty-printed preview of the body (long values like JWTs are truncated so the terminal stays readable) — then a pass/fail summary at the end.
 
-What it walks through, end to end: health checks → login as a seeded user (`admin@pucrs.br`) → profile lookup → create/read/update/soft-delete a throwaway user → create/read/update/soft-delete a throwaway role → assign/unassign that role → `/authorize` against the permission matrix (one call that should be granted, one that should be correctly denied with `403`) → token refresh → metrics → docs. Every run generates a unique demo user/role, so it's safe to run repeatedly without hitting `409 Conflict`.
+What it walks through across 10 sections:
+1. **Health Checks:** `/`, `/health`, `/api/health`.
+2. **Authentication:** Failed login (`401`), successful login (`200`), profile check (`200`), and invalid token rejection (`401`).
+3. **User Management:** Empty payload validation (`400`), user creation (`201`), duplicate email conflict (`409`), user listing (`200`), non-existent UUID lookup (`404`), profile update (`200`), and password change (`200`).
+4. **Role Management:** Blank name validation (`400`), role creation (`201`), duplicate role conflict (`409`), role listing (`200`), non-existent UUID lookup (`404`), full update (`200`), and partial patch (`200`).
+5. **Role Assignment & Inspection:** Assigning role to user (`200`) and inspecting user roles (`200`).
+6. **Policy Matrix Authorization:** Valid access to `rooms` (`200`) and denied access to `courses` (`403`).
+7. **Security Guard & Non-Admin Enforcement:** Login as non-admin student, followed by verified `403 Forbidden` denials when attempting to assign roles, delete roles, create roles, create users, delete users, modify other users' profiles, or change other users' passwords.
+8. **Session Renewal:** Refresh with invalid token (`401`) and renewal with valid refresh token (`200`).
+9. **Cleanup:** Unassigning roles and soft-deleting test entities (`204`).
+10. **Observability & Docs:** Prometheus metrics (`200`), Swagger UI (`200`), and OpenAPI specification (`200`).
 
 ---
 
