@@ -1,0 +1,19 @@
+{
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": ".",
+  "testEnvironment": "node",
+  "testRegex": ".e2e-spec.ts$",
+  "transform": {
+    "^.+\\.ts$": [
+      "ts-jest",
+      {
+        "tsconfig": "tsconfig.json",
+        "diagnostics": { "ignoreCodes": [6059] }
+      }
+    ]
+  },
+  "setupFilesAfterEnv": ["<rootDir>/setup-e2e.ts"],
+  "reporters": ["default", "<rootDir>/reporters/e2e-reporter.js"],
+  "verbose": true,
+  "clearMocks": true
+}

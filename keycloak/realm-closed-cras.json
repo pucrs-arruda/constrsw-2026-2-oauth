@@ -1,0 +1,57 @@
+{
+  "realm": "closed-cras",
+  "enabled": true,
+  "clients": [
+    {
+      "clientId": "bff",
+      "name": "Closed CRAS OAuth gateway",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "local-development-secret",
+      "publicClient": false,
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "protocol": "openid-connect"
+    },
+    {
+      "clientId": "oauth-admin",
+      "name": "Closed CRAS admin API client",
+      "description": "Service account usada pelo servico oauth para falar com o Admin API. Dono unico do token admin.",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "local-development-admin-secret",
+      "publicClient": false,
+      "directAccessGrantsEnabled": false,
+      "standardFlowEnabled": false,
+      "serviceAccountsEnabled": true,
+      "protocol": "openid-connect"
+    }
+  ],
+  "users": [
+    {
+      "username": "demo@pucrs.br",
+      "email": "demo@pucrs.br",
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "demo",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "service-account-oauth-admin",
+      "enabled": true,
+      "serviceAccountClientId": "oauth-admin",
+      "clientRoles": {
+        "realm-management": [
+          "manage-users",
+          "view-users",
+          "query-users"
+        ]
+      }
+    }
+  ]
+}
