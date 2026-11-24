@@ -77,6 +77,20 @@ export class AuthController {
     return { status: "signed_out" };
   }
 
+  @Post("validate")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Valida um access token para um recurso de domínio",
+  })
+  @ApiUnauthorizedResponse({ description: "Token ausente, inválido ou expirado" })
+  @ApiBadRequestResponse({ description: "resource ausente" })
+  validate(
+    @Req() request: Request,
+    @Body() body: { resource?: string },
+  ): Promise<{ active: boolean; allowed: boolean; resource: string }> {
+    return this.auth.validate(request.headers.authorization, body?.resource);
+  }
+
   private toAuthResponse({
     token_type,
     access_token,
